@@ -1,4 +1,4 @@
-# ai_recompilation_win32_jthief
+# ai_recompilation_jthief
 
 AI-assisted reverse engineering and reimplementation of **Jewel Thief**
 (Paul Ligeski / ServantWare, 1991–1993), a 16-bit Windows 3.x game. The goal
