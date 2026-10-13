@@ -1,0 +1,12 @@
+# Original game files are copyrighted: users supply their own copy.
+/original/*
+!/original/README.md
+*.EXE
+*.exe
+*.HLP
+*.BMP
+
+# Build output and local extractions
+/build*/
+/extracted/
+__pycache__/
