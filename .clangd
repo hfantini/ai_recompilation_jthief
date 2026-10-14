@@ -1,0 +1,4 @@
+# The Windows build is the one that compiles every source, including the
+# platform layer; create it with `cmake --preset win32-debug`.
+CompileFlags:
+  CompilationDatabase: build/win32-debug

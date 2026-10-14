@@ -1,5 +1,5 @@
-#ifndef JT_WIN32_PROFILE_H
-#define JT_WIN32_PROFILE_H
+#ifndef JT_PROFILE_H
+#define JT_PROFILE_H
 
 /*
  * SERVANT.INI, read and written like the original: the file sits next to

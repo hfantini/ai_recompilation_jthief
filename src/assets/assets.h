@@ -74,6 +74,13 @@ bool assets_icon(const Assets *assets, const char *name, NeBlob *out);
 bool assets_resource_named(const Assets *assets, uint16_t type, const char *name, NeBlob *out);
 bool assets_resource_id(const Assets *assets, uint16_t type, uint16_t id, NeBlob *out);
 
+/*
+ * The STATIC texts of a named Windows 3.x dialog, such as the instructions
+ * box, joined into paragraphs in Windows-1252; for platforms that build
+ * their own dialogs. False if the dialog is missing or malformed.
+ */
+bool assets_dialog_text(const Assets *assets, const char *name, char *out, size_t size);
+
 /* A text of the original, in Windows-1252; empty if the offset is invalid. */
 const char *assets_text(const Assets *assets, AssetsText text);
 

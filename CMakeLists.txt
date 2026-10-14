@@ -23,11 +23,12 @@ if(WIN32)
     endif()
 endif()
 
-# --- common: hashing and file system helpers --------------------------------
+# --- common: hashing, file system and INI helpers ----------------------------
 add_library(jt_common STATIC
     src/common/sha256.c
     src/common/fs.c
     $<IF:$<BOOL:${WIN32}>,src/common/fs_win32.c,src/common/fs_posix.c>
+    $<IF:$<BOOL:${WIN32}>,src/common/ini_win32.c,src/common/ini_posix.c>
 )
 target_include_directories(jt_common PUBLIC src/common)
 if(NOT WIN32)
@@ -45,7 +46,7 @@ target_include_directories(jt_original PUBLIC src/original)
 target_link_libraries(jt_original PUBLIC jt_common)
 
 # --- gfx: DIB decoding and the software framebuffer --------------------------
-add_library(jt_gfx STATIC src/gfx/dib.c src/gfx/framebuffer.c src/gfx/shapes.c)
+add_library(jt_gfx STATIC src/gfx/dib.c src/gfx/framebuffer.c src/gfx/icon.c src/gfx/shapes.c)
 target_include_directories(jt_gfx PUBLIC src/gfx)
 if(NOT WIN32)
     target_link_libraries(jt_gfx PUBLIC m)
@@ -66,19 +67,38 @@ add_library(jt_render STATIC src/render/render.c src/render/scenery.c)
 target_include_directories(jt_render PUBLIC src/render)
 target_link_libraries(jt_render PUBLIC jt_core jt_assets jt_gfx)
 
+# --- profile: options and high scores in the original's SERVANT.INI ----------
+add_library(jt_profile STATIC src/profile/profile.c)
+target_include_directories(jt_profile PUBLIC src/profile)
+target_link_libraries(jt_profile PUBLIC jt_core jt_assets jt_common)
+
 # --- game: Windows build (jthief_32.exe or jthief_64.exe) --------------------
 if(WIN32)
     add_executable(jthief WIN32
         src/platform/win32/main.c
         src/platform/win32/dialogs.c
-        src/platform/win32/profile.c
         src/platform/win32/ticker.c
         src/platform/win32/win16res.c
     )
-    target_link_libraries(jthief PRIVATE jt_render jt_core jt_assets winmm)
+    target_link_libraries(jthief PRIVATE jt_render jt_profile jt_core jt_assets winmm)
     # Every build tree drops the game in bin/<config>, e.g. bin/release/jthief_64.exe.
     set_target_properties(jthief PROPERTIES
         OUTPUT_NAME "jthief_${JT_BITS}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/$<LOWER_CASE:$<CONFIG>>"
+    )
+else()
+    # --- game: Linux build with GTK 4 (jthief) -------------------------------
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
+    add_executable(jthief
+        src/platform/gtk/main.c
+        src/platform/gtk/dialogs.c
+        src/platform/gtk/ticker.c
+    )
+    # clock_nanosleep() is hidden by strict C99 otherwise.
+    target_compile_definitions(jthief PRIVATE _POSIX_C_SOURCE=200809L)
+    target_link_libraries(jthief PRIVATE jt_render jt_profile jt_core jt_assets PkgConfig::GTK4)
+    set_target_properties(jthief PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/$<LOWER_CASE:$<CONFIG>>"
     )
 endif()

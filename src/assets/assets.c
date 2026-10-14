@@ -3,6 +3,7 @@
 #include "fs.h"
 #include "original.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -109,4 +110,128 @@ bool assets_cursor(const Assets *assets, const char *name, NeBlob *out)
 bool assets_icon(const Assets *assets, const char *name, NeBlob *out)
 {
     return find_group_image(assets, NE_RT_GROUP_ICON, NE_RT_ICON, name, out);
+}
+
+typedef struct {
+    const uint8_t *data;
+    size_t size;
+    size_t position;
+    bool ok;
+} TemplateReader;
+
+static void skip(TemplateReader *reader, size_t count)
+{
+    if (!reader->ok || count > reader->size - reader->position) {
+        reader->ok = false;
+        return;
+    }
+    reader->position += count;
+}
+
+static uint8_t read_byte(TemplateReader *reader)
+{
+    if (!reader->ok || reader->position >= reader->size) {
+        reader->ok = false;
+        return 0;
+    }
+    return reader->data[reader->position++];
+}
+
+static const char *read_string(TemplateReader *reader)
+{
+    const char *start = (const char *)reader->data + reader->position;
+
+    if (!reader->ok || reader->position >= reader->size
+        || memchr(start, '\0', reader->size - reader->position) == NULL) {
+        reader->ok = false;
+        return "";
+    }
+    reader->position += strlen(start) + 1;
+    return start;
+}
+
+/* Menus and control texts are a string, or 0xFF followed by a 16-bit ordinal. */
+static const char *read_name_or_ordinal(TemplateReader *reader)
+{
+    enum { ORDINAL_MARKER = 0xFF };
+
+    if (reader->ok && reader->position < reader->size
+        && reader->data[reader->position] == ORDINAL_MARKER) {
+        skip(reader, 3);
+        return "";
+    }
+    return read_string(reader);
+}
+
+/* Some paragraphs of the original are wrapped across two controls. */
+static bool ends_sentence(const char *text, size_t length)
+{
+    return length == 0 || strchr(".!?:", text[length - 1]) != NULL;
+}
+
+static void append_paragraph_text(char *out, size_t size, const char *text)
+{
+    size_t used = strlen(out);
+    const char *separator = used == 0 ? "" : ends_sentence(out, used) ? "\n\n" : " ";
+    size_t length = strlen(separator) + strlen(text);
+
+    if (length >= size - used) {
+        length = size - used - 1;
+    }
+    snprintf(out + used, length + 1, "%s%s", separator, text);
+}
+
+bool assets_dialog_text(const Assets *assets, const char *name, char *out, size_t size)
+{
+    enum {
+        DS_SETFONT = 0x40,
+        PREDEFINED_CLASS_FLAG = 0x80,
+        STATIC_CLASS = 0x82,
+        ITEM_GEOMETRY_SIZE = 14 /* x, y, cx, cy, id and a 32-bit style */
+    };
+    TemplateReader reader;
+    NeBlob blob;
+    uint8_t style, count, i;
+
+    if (size == 0 || !assets_resource_named(assets, NE_RT_DIALOG, name, &blob)) {
+        return false;
+    }
+    out[0] = '\0';
+    reader.data = blob.data;
+    reader.size = blob.size;
+    reader.position = 0;
+    reader.ok = true;
+
+    style = read_byte(&reader); /* the low byte of the style holds DS_SETFONT */
+    skip(&reader, 3);
+    count = read_byte(&reader);
+    skip(&reader, 8); /* x, y, cx, cy */
+    read_name_or_ordinal(&reader); /* menu */
+    read_string(&reader);          /* class */
+    read_string(&reader);          /* caption */
+    if (style & DS_SETFONT) {
+        skip(&reader, 2);
+        read_string(&reader);
+    }
+
+    for (i = 0; i < count && reader.ok; i++) {
+        bool is_static;
+        const char *text;
+
+        skip(&reader, ITEM_GEOMETRY_SIZE);
+        if (reader.ok && reader.position < reader.size
+            && (reader.data[reader.position] & PREDEFINED_CLASS_FLAG)) {
+            is_static = read_byte(&reader) == STATIC_CLASS;
+        }
+        else {
+            is_static = false;
+            read_string(&reader);
+        }
+        text = read_name_or_ordinal(&reader);
+        skip(&reader, read_byte(&reader)); /* creation data */
+        if (reader.ok && is_static && text[0] != '\0') {
+            append_paragraph_text(out, size, text);
+        }
+    }
+    return reader.ok;
 }
