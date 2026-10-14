@@ -88,6 +88,91 @@ Microsoft C 7 or Visual C++ 1.x)*.
 Most of the file is bitmap data. The game logic plus the C runtime fit in
 about 15 KB of code.
 
+## Implementation (v1.4 code)
+
+Read statically from the Ghidra export (2026-10-13); nothing here has been
+checked against the running game yet. Names refer to
+`tools/ghidra/symbols/jwlthief.symbols`.
+
+### Layout
+
+- Game code spans `1000:0010`–`1000:2c8c` (about 50 functions). The Microsoft
+  C runtime starts at `entry` (`1000:2cce`) and is not ported.
+- One window of 500x300 pixels at (60, 30), `WS_SYSMENU | WS_MINIMIZEBOX`, so
+  it cannot be resized. The client area minus a 32-pixel status bar at the
+  bottom is the playfield.
+- The status bar shows the level name, one jewel icon per level reached, the
+  lives (`"%i man"` / `"%i men"`) and the score. The score is stored divided
+  by 100 and drawn as `"%i00"`.
+
+### Game rules
+
+- The player is the mouse cursor. `WM_MOUSEMOVE` drives everything the player
+  does; there is no keyboard input besides menu accelerators.
+- **Lives:** 9 at the start, 9 at most. One extra life each time the score
+  reaches the next multiple of 300 (30,000 on screen).
+- **Jewels:** `(level + 2) * 2` per level, at random positions. Taking one
+  adds `level + 1` to the score (level counted from 0).
+- **Guards:** `(level + 1) / 2 + 3` per level, except levels 7 and 12
+  (0-based: Aquamarine and Citrine), which are swarms of `level + 10`.
+- **Guard speed:** per axis, `(speed + 1) * 2 + level / 2 + rand() % 4`,
+  where `speed` is the 0–2 setting. Guards bounce off the playfield edges;
+  on levels 0, 2, 8 and 9 their upper bound is 82 pixels below the top, so
+  they stay out of the scenery. On level 12 (Raindrop) they wrap from the
+  bottom back to the top instead of bouncing.
+- **Death:** on a timer tick, when the cursor box overlaps a guard; and on a
+  mouse move, when the cursor leaves the playfield, unless `Cheat=1`.
+  Collision boxes are axis-aligned; the cursor box is its position plus 8 to
+  24 pixels on each axis.
+- **Levels:** 14, named after the jewels. The scene is `level / 2` (star,
+  sphinx, water, cave, castle, city, cloud), each drawn with GDI primitives
+  plus one bitmap. Guard and jewel bitmaps come from per-level name tables in
+  the data segment.
+- **End:** after level 14, below Expert speed the game says "Now try it at
+  the 'Expert' speed"; at Expert it shows the Matthew 13:45-46 parable. Then
+  the high score check and "Play again?".
+
+### Engine details that matter for fidelity
+
+- The game tick is `SetTimer` with 5 ms. Windows 3.1 rounds timers to its
+  ~55 ms clock (18.2 Hz), which is the real pace of the game. A modern
+  Windows honors much shorter intervals, so a port must fix the tick at
+  about 55 ms.
+- Guards and jewels are drawn with `BitBlt` raster operation `0x990066`
+  (DSxn): draw to erase, move, draw again. There is no back buffer. A
+  palette-dependent ROP like this explains why sprites vanish in high color.
+- All randomness uses the Microsoft C `rand()`, seeded with `srand(time(0))`
+  on `WM_CREATE`. Matching sequences requires the same LCG.
+- The cursor switches between a right- and a left-facing shape depending on
+  the horizontal direction of the last move.
+
+### Settings (`SERVANT.INI`, section `[Jewel Thief]`)
+
+| Key         | Values | Effect |
+|-------------|--------|--------|
+| `Speed`     | 0–2    | Guard speed; 2 is Expert and unlocks the real ending |
+| `LevelWait` | 0/1    | Shows a 3-second wait dialog before each level |
+| `Cheat`     | 0/1    | Leaving the playfield no longer costs a life |
+| `Scores`    | 10 longs | High scores |
+| `Names`     | 10 names | High score names, up to 25 characters when entered |
+| `Serial`    | string | Compared with a fixed string; only suppresses the About dialog at startup |
+
+### Differences from the background notes
+
+- No code promotes the player to the next speed after finishing, and none
+  counts how many times the game was finished. In v1.4 the only effect of
+  finishing below Expert is the "try it at Expert" message.
+- The guard table orders Bat before Spider (`..., Battleship, Bat, Spider,
+  ...`).
+- Guards are added every second level, not every level.
+
+### Open questions
+
+- A `SPLASH` window class that paints `winlogo.bmp` and `jwlthief.bmp` from
+  disk is registered, but no code creating such a window has been found.
+- The exact menu ids of the help commands.
+- The names of the three speeds and the cursor size, to confirm in the game.
+
 ## Sources
 
 - Internet Archive items:
