@@ -1,0 +1,59 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}"
+        },
+        {
+            "name": "win32",
+            "hidden": true,
+            "inherits": "base",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-mingw32.cmake"
+        },
+        {
+            "name": "win64",
+            "hidden": true,
+            "inherits": "base",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-mingw64.cmake"
+        },
+        {
+            "name": "win32-debug",
+            "displayName": "Windows 32-bit, debug",
+            "inherits": "win32",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "win32-release",
+            "displayName": "Windows 32-bit, release (runs on Windows XP)",
+            "inherits": "win32",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "OFF" }
+        },
+        {
+            "name": "win64-debug",
+            "displayName": "Windows 64-bit, debug",
+            "inherits": "win64",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "win64-release",
+            "displayName": "Windows 64-bit, release",
+            "inherits": "win64",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "OFF" }
+        },
+        {
+            "name": "linux",
+            "displayName": "Linux: portable libraries and tests",
+            "inherits": "base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        }
+    ],
+    "buildPresets": [
+        { "name": "win32-debug", "configurePreset": "win32-debug" },
+        { "name": "win32-release", "configurePreset": "win32-release" },
+        { "name": "win64-debug", "configurePreset": "win64-debug" },
+        { "name": "win64-release", "configurePreset": "win64-release" },
+        { "name": "linux", "configurePreset": "linux" }
+    ]
+}

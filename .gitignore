@@ -8,5 +8,6 @@
 
 # Build output and local extractions
 /build*/
+/bin/
 /extracted/
 __pycache__/

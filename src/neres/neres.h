@@ -68,6 +68,9 @@ NeStatus ne_image_find_named(const NeImage *image, uint16_t type_id, const char 
 
 NeStatus ne_image_find_id(const NeImage *image, uint16_t type_id, uint16_t name_id, NeBlob *out);
 
+/* The initialized bytes of the automatic data segment (DGROUP) in the file. */
+NeStatus ne_image_auto_data_segment(const NeImage *image, NeBlob *out);
+
 const char *ne_status_message(NeStatus status);
 
 #endif

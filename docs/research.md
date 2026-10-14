@@ -1,7 +1,10 @@
 # Jewel Thief — research notes
 
-Background gathered before reverse engineering started (2026-10-13).
-Facts marked *(inferred)* come from strings or resource names, not from code.
+What is known about the original game and how this port reproduces it. The
+first sections hold the background gathered before reverse engineering
+started (2026-10-13); facts marked *(inferred)* there come from strings or
+resource names, not from code. The later sections come from the code and
+resources of v1.4.
 
 ## The game
 
@@ -90,8 +93,7 @@ about 15 KB of code.
 
 ## Implementation (v1.4 code)
 
-Read statically from the Ghidra export (2026-10-13); nothing here has been
-checked against the running game yet. Names refer to
+Read statically from the Ghidra export (see `tools/ghidra/`). Names refer to
 `tools/ghidra/symbols/jwlthief.symbols`.
 
 ### Layout
@@ -100,7 +102,9 @@ checked against the running game yet. Names refer to
   C runtime starts at `entry` (`1000:2cce`) and is not ported.
 - One window of 500x300 pixels at (60, 30), `WS_SYSMENU | WS_MINIMIZEBOX`, so
   it cannot be resized. The client area minus a 32-pixel status bar at the
-  bottom is the playfield.
+  bottom is the playfield. Under Windows 3.1 that client area is 498x260: the
+  floor polygon the game paints ends exactly at y 228, the bottom of the
+  playfield.
 - The status bar shows the level name, one jewel icon per level reached, the
   lives (`"%i man"` / `"%i men"`) and the score. The score is stored divided
   by 100 and drawn as `"%i00"`.
@@ -130,46 +134,95 @@ checked against the running game yet. Names refer to
   the data segment.
 - **End:** after level 14, below Expert speed the game says "Now try it at
   the 'Expert' speed"; at Expert it shows the Matthew 13:45-46 parable. Then
-  the high score check and "Play again?".
+  the high score check, the high score table (shown after every game) and
+  "Play again?".
+- **Spawning order:** a new game spawns jewels before guards; a level-up
+  spawns guards before jewels. Guards already on the field stay through a
+  level-up; only free slots (negative x) are filled.
+
+### Quirks
+
+Kept by the port on purpose:
+
+- Every mouse move outside the playfield costs a life, not just leaving it,
+  so moving over the status bar drains lives quickly.
+- A guard catching the thief on the last life leaves 0 lives and the game
+  goes on; the next catch ends it. Leaving the playfield ends it at 0.
+- At 9 lives the extra life threshold does not advance, so the first jewel
+  taken after dropping below 9 grants a life at once.
+- After a catch the thief is harmless until the mouse moves again, so a
+  guard sitting on a still cursor takes one life only.
+
+### Scenery
+
+Each pair of levels has a scene. Besides the scenery at the top, the game
+fills two polygons it builds on `WM_CREATE`: a band around the horizon
+(y 92–150) and the floor, from the horizon down to y 228. The floor covers
+almost all of the playfield, so the white window background barely shows.
+
+| Levels | Scene  | Top of the screen | Horizon band | Floor |
+|--------|--------|-------------------|--------------|-------|
+| 1–2    | star   | black sky, 10 random `STAR`s, a dark red planet | black | dark red |
+| 3–4    | sphinx | cyan sky, sun, two two-tone pyramids, `SPHINX` | orange | yellow |
+| 5–6    | water  | tiled `WATER` | (tiles) | navy |
+| 7–8    | cave   | `CAVE` | (bitmap) | olive |
+| 9–10   | castle | cyan sky, sun, two green hills, `CASTLE` | dark green | dark green |
+| 11–12  | city   | `CITY` | black | gray |
+| 13–14  | cloud  | cyan sky, sun, a rainbow of five 7-pixel arcs | cyan | cyan |
+
+The sprites are drawn for the floor of their own level: their bitmaps hold
+the colors that the raster operation below turns into the intended ones over
+that floor. The emerald, for instance, is stored navy and cyan and shows
+green with a black outline over the dark red floor of level 1; the clouds
+are stored cyan and turn white over the cyan sky of level 13.
 
 ### Engine details that matter for fidelity
 
-- The game tick is `SetTimer` with 5 ms. Windows 3.1 rounds timers to its
-  ~55 ms clock (18.2 Hz), which is the real pace of the game. A modern
-  Windows honors much shorter intervals, so a port must fix the tick at
-  about 55 ms.
+- The game tick is `SetTimer` with 5 ms. Windows 3.1 runs timers on the PC
+  timer chip at 1193182 / 65536 Hz, so a tick really comes every ~54.9 ms;
+  that is the pace of the game. Modern Windows honors much shorter intervals.
+- Timer ticks keep arriving while a modal dialog is open, since the dialog's
+  own message loop dispatches them. Guards therefore keep moving during the
+  pause bar, the "Get ready" box and the options; the thief is safe because
+  the main window has lost the focus.
 - Guards and jewels are drawn with `BitBlt` raster operation `0x990066`
-  (DSxn): draw to erase, move, draw again. There is no back buffer. A
-  palette-dependent ROP like this explains why sprites vanish in high color.
-- All randomness uses the Microsoft C `rand()`, seeded with `srand(time(0))`
-  on `WM_CREATE`. Matching sequences requires the same LCG.
+  (DSxn, `NOT(dest XOR src)`): draw to erase, move, draw again, with no back
+  buffer. Video cards apply it to palette indices. In the 16 VGA colors,
+  color `15 - n` is the complement of color `n`, and the 256-color static
+  palette keeps those colors at indices 0–7 and 248–255, so both modes give
+  the same result. In high color the operation runs on RGB values instead,
+  which is why sprites look wrong or vanish there. White sprite pixels leave
+  the background untouched.
+- All randomness uses the Microsoft C `rand()` (`state * 214013 + 2531011`,
+  returning bits 16–30), seeded with the low 16 bits of `time(NULL)` on
+  `WM_CREATE`. The star scene also draws its stars with `rand()`.
 - The cursor switches between a right- and a left-facing shape depending on
-  the horizontal direction of the last move.
+  the horizontal direction of the last move, inside the playfield only. While
+  a level is set up it is the hourglass.
 
 ### Settings (`SERVANT.INI`, section `[Jewel Thief]`)
 
 | Key         | Values | Effect |
 |-------------|--------|--------|
-| `Speed`     | 0–2    | Guard speed; 2 is Expert and unlocks the real ending |
-| `LevelWait` | 0/1    | Shows a 3-second wait dialog before each level |
+| `Speed`     | 0–2    | Guard speed; 2 is Expert and unlocks the real ending. Missing means 1 |
+| `LevelWait` | 0/1    | Shows a 3-second "Get ready" box at startup, on a new game and whenever the scene changes |
 | `Cheat`     | 0/1    | Leaving the playfield no longer costs a life |
-| `Scores`    | 10 longs | High scores |
-| `Names`     | 10 names | High score names, up to 25 characters when entered |
+| `Scores`    | 10 longs | High scores, comma-separated (read with spaces and tabs too) |
+| `Names`     | 10 names | High score names, comma-separated, up to 25 characters when entered |
 | `Serial`    | string | Compared with a fixed string; only suppresses the About dialog at startup |
+
+The options dialog writes the three options and restarts the game.
 
 ### Differences from the background notes
 
 - No code promotes the player to the next speed after finishing, and none
   counts how many times the game was finished. In v1.4 the only effect of
-  finishing below Expert is the "try it at Expert" message.
+  finishing below Expert is the "try it at Expert" message. The "mastered
+  Jewel Thief over five times" text is still in the data segment, but the
+  only code that could show it is unreachable.
 - The guard table orders Bat before Spider (`..., Battleship, Bat, Spider,
   ...`).
 - Guards are added every second level, not every level.
-
-### Open questions
-
-- Behavior still to confirm in the running game: the real pace, guard
-  movement and the scenery drawing.
 
 ## Resources (v1.4)
 
@@ -229,12 +282,41 @@ the 8–24 pixel collision box. `FUNICON` is the application icon.
 instance paints a `.bmp` file from the game directory, chosen by its window
 style: 0 is `winlogo.bmp`, 1 is `jwlthief.bmp`.
 
-## Project decisions
+## Port decisions
 
-- **Fidelity target:** a modern port that preserves the gameplay as closely
-  as possible (rules, formulas, pace), not a bit-exact replica. Known flaws
-  of the original are fixed: sprites are drawn with masks or transparency
-  instead of a palette-dependent ROP, so they work at any color depth.
+The goal is a modern port that preserves the gameplay as closely as
+possible (rules, formulas, pace, quirks), not a bit-exact replica.
+
+- **Assets:** bitmaps, cursors, icon, menu, accelerators, dialogs and texts
+  are all read at runtime from the user's `JWLTHIEF.EXE`. Dialog and menu
+  templates are converted from the Windows 3.x format to Win32 on the fly,
+  so the original layouts, fonts and wording appear unchanged.
+- **Sprite colors:** the raster operation is reproduced on palette indices
+  of the nearest VGA colors, as 16- and 256-color displays did, so sprites
+  look as they did in 256 colors on any display.
+- **Rendering:** each frame is drawn into a 32-bit buffer and copied to the
+  window once, instead of drawing and erasing sprites on screen. The scenery
+  is redrawn only when the scene changes.
+- **Scenery colors:** brushes the original asked for outside the 20 system
+  colors were dithered by Windows 3.1; the port paints them as solid colors.
+- **Stars:** drawn when a game starts or the star scene comes back, using
+  `rand()` there. The original also redrew them on every repaint.
+- **Window:** the client area is fixed at 498x260, the Windows 3.1 size,
+  since modern frames are thicker than the original's 500x300 allowed for.
+- **Pace:** a clock thread posts a tick every 54.9 ms. It keeps ticking under
+  modal dialogs, coalesces late ticks and does not catch up after a stall,
+  like `WM_TIMER`.
+- **Help:** the original opened `JWLTHIEF.HLP` in WinHelp, which modern
+  Windows no longer ships. The three Help commands open the Instructions,
+  Hints and Story boxes that v1.4 still carries, and are renamed to match;
+  the Help button of the options does the same.
+- **Registration:** the shareware nag is gone. The About box no longer shows
+  at startup and its Register button is disabled.
+- **Debug mode:** `--debug` enables keys the original never had: Home toggles
+  a god mode, Page Up / Page Down change the level.
+- **Windows versions:** the 32-bit build is compiled against the Windows XP
+  API (`_WIN32_WINNT=0x0501`) and runs from XP to 11; the 64-bit build
+  targets modern Windows.
 
 ## Sources
 

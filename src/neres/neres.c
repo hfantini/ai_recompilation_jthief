@@ -220,6 +220,48 @@ NeStatus ne_image_find_id(const NeImage *image, uint16_t type_id, uint16_t name_
     return find_resource(image, &query);
 }
 
+NeStatus ne_image_auto_data_segment(const NeImage *image, NeBlob *out)
+{
+    enum {
+        AUTO_DATA_FIELD = 0x0E,
+        SEGMENT_COUNT_FIELD = 0x1C,
+        SEGMENT_TABLE_FIELD = 0x22,
+        ALIGNMENT_SHIFT_FIELD = 0x32,
+        SEGMENT_ENTRY_SIZE = 8
+    };
+    uint16_t number, count, table, shift, sector, length;
+    size_t entry, offset, size;
+
+    if (image == NULL || out == NULL) {
+        return NE_ERR_INVALID_ARGUMENT;
+    }
+    if (!read_u16(image, image->header_offset + AUTO_DATA_FIELD, &number)
+        || !read_u16(image, image->header_offset + SEGMENT_COUNT_FIELD, &count)
+        || !read_u16(image, image->header_offset + SEGMENT_TABLE_FIELD, &table)
+        || !read_u16(image, image->header_offset + ALIGNMENT_SHIFT_FIELD, &shift)) {
+        return NE_ERR_MALFORMED;
+    }
+    /* Segment numbers are 1-based; 0 means the module has no data segment. */
+    if (number == 0 || number > count || shift > 16) {
+        return NE_ERR_NOT_FOUND;
+    }
+    entry = image->header_offset + table + (size_t)(number - 1) * SEGMENT_ENTRY_SIZE;
+    if (!read_u16(image, entry, &sector) || !read_u16(image, entry + 2, &length)) {
+        return NE_ERR_MALFORMED;
+    }
+    if (sector == 0) {
+        return NE_ERR_NOT_FOUND;
+    }
+    offset = (size_t)sector << shift;
+    size = length == 0 ? 0x10000 : length; /* a length of 0 means 64 KB */
+    if (offset > image->size || image->size - offset < size) {
+        return NE_ERR_MALFORMED;
+    }
+    out->data = image->data + offset;
+    out->size = size;
+    return NE_OK;
+}
+
 const char *ne_status_message(NeStatus status)
 {
     switch (status) {
