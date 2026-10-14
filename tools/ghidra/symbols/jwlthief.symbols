@@ -1,0 +1,129 @@
+# Names and types recovered for JWLTHIEF.EXE v1.4, applied by
+# tools/ghidra/scripts/ApplySymbols.java. Our own knowledge, not original code.
+#
+# struct NAME  TYPE member, TYPE member[N], ...
+# fn     ADDR  NAME                          # comment
+# var    ADDR  NAME  TYPE                    # comment
+#
+# Types are Win16Api types (including BITMAP and RECT), the structs below,
+# or TYPE[N] arrays.
+
+struct Enemy      int x, int y, int speedX, int speedY, BOOL movingRight, BOOL movingDown
+struct Jewel      int x, int y, BOOL present
+struct HighScore  char name[50], LONG score
+
+# Startup and window
+fn  1000:0010  WinMain
+fn  1000:009c  RegisterMainClass
+fn  1000:0106  CreateMainWindow
+fn  1000:0872  RunDialog                 # MakeProcInstance + DialogBox + FreeProcInstance
+fn  1000:08bc  PauseDlgProc
+fn  1000:090a  WaitDlgProc               # closes itself after a 3 s timer
+
+# Game flow
+fn  1000:0964  NewGame
+fn  1000:09f4  GameCompleted             # after level 14: ending message, high score, play again
+fn  1000:0b38  IsInPlayfield
+fn  1000:0b72  CursorHitsEnemy
+fn  1000:0bda  FindJewelUnderCursor      # index, or -1
+fn  1000:0c5c  LoadBitmapIntoDC
+fn  1000:0ce0  SpawnEnemies
+fn  1000:0dbb  DrawEnemies               # ROP 0x990066: same call erases and draws
+fn  1000:0e17  MoveEnemies
+fn  1000:0ee2  SpawnJewels
+fn  1000:0f8c  DrawJewel                 # ROP 0x990066: same call erases and draws
+
+# Status bar and scenery
+fn  1000:0fdc  DrawStatusBar
+fn  1000:127e  DrawLevelName             # level name plus one jewel icon per level
+fn  1000:1343  DrawLives
+fn  1000:13c7  DrawScore
+fn  1000:144b  DrawScene                 # scene = level / 2
+fn  1000:1544  DrawSceneStar
+fn  1000:1656  DrawSceneSphinx
+fn  1000:19f4  DrawSceneWater
+fn  1000:1a91  DrawSceneCave
+fn  1000:1ad2  DrawSceneCastle
+fn  1000:1c89  DrawSceneCity
+fn  1000:1d05  DrawSceneCloud
+
+# High scores, dialogs and settings
+fn  1000:1f88  LoadHighScores            # also builds the SERVANT.INI path
+fn  1000:2130  SaveHighScores
+fn  1000:2220  SubmitHighScore
+fn  1000:230c  ShowHighScores
+fn  1000:248c  ShowAbout
+fn  1000:253c  RegisterSplashClass
+fn  1000:25f4  PaintSplash               # reads a .bmp from disk
+fn  1000:2740  ReadFileAt
+fn  1000:27c4  ShowRegister
+fn  1000:2900  IsRegistered
+fn  1000:2942  ShowOptions
+fn  1000:2c04  IsLevelWaitEnabled
+fn  1000:2c3c  GetSpeedSetting           # 0..2, 2 = Expert
+fn  1000:2c8c  IsCheatEnabled
+
+# Microsoft C runtime
+fn  1000:2d74  time
+fn  1000:2df6  strtok
+fn  1000:2e86  srand
+fn  1000:2e9a  rand
+
+# Game state
+var 1008:0ef6  lives             int
+var 1008:15e0  level             int     # 0..13
+var 1008:15e4  score             int     # displayed times 100
+var 1008:15e6  jewelsLeft        int
+var 1008:15f2  enemyCount        int
+var 1008:15f6  playerActive      BOOL    # cursor inside the playfield and window focused
+var 1008:15f8  nextExtraLife     int
+var 1008:13ec  inTimerTick       BOOL    # re-entrancy guard for WM_TIMER
+var 1008:1172  cursorX           int
+var 1008:1174  cursorY           int
+var 1008:0f22  enemies           Enemy[32]
+var 1008:151e  jewels            Jewel[32]
+
+# Window and resources
+var 1008:0ef8  hInstance         HINSTANCE
+var 1008:116c  hwndMain          HWND
+var 1008:114e  hAccel            HACCEL
+var 1008:0f20  timerId           UINT
+var 1008:116a  hcurRight         HCURSOR
+var 1008:15e8  hcurLeft          HCURSOR
+var 1008:15ec  hcurWait          HCURSOR
+var 1008:10a4  hdcScratch        HDC
+var 1008:13fe  playfield         RECT
+var 1008:0f18  statusBar         RECT
+
+# Memory DCs holding the current bitmaps
+var 1008:10a6  enemyDC           HDC
+var 1008:15fa  enemyBitmap       HBITMAP
+var 1008:114a  enemyOldBitmap    HGDIOBJ
+var 1008:13f0  enemyBitmapInfo   BITMAP
+var 1008:1170  jewelDC           HDC
+var 1008:0f16  jewelBitmap       HBITMAP
+var 1008:15e2  jewelOldBitmap    HGDIOBJ
+var 1008:13c8  jewelBitmapInfo   BITMAP
+var 1008:15f4  sceneDC           HDC
+var 1008:15de  sceneBitmap       HBITMAP
+var 1008:0ef4  sceneOldBitmap    HGDIOBJ
+var 1008:10bc  sceneBitmapInfo   BITMAP
+var 1008:10a2  statusDC          HDC
+var 1008:114c  statusBitmap      HBITMAP
+var 1008:116e  statusOldBitmap   HGDIOBJ
+var 1008:10ae  statusBitmapInfo  BITMAP
+var 1008:0efa  sceneBrush        HBRUSH
+
+# Name tables, indexed by level (or level / 2 for scenes)
+var 1008:05ea  jewelBitmapNames  NPSTR[14]
+var 1008:0616  enemyBitmapNames  NPSTR[14]
+var 1008:072e  levelNames        NPSTR[14]
+var 1008:074a  sceneBitmapNames  NPSTR[7]
+
+# Settings and high scores
+var 1008:15fc  iniPath           char[100]   # <exe dir>\SERVANT.INI, up to the end of DGROUP
+var 1008:13ee  speedOption       int
+var 1008:10a8  cheatOption       BOOL
+var 1008:10aa  levelWaitOption   BOOL
+var 1008:1176  highScores        HighScore[11]   # 10 entries plus the one being entered
+var 1008:13d6  highScoreOrder    NPSTR[11]

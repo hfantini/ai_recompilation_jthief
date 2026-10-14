@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Imports original/JWLTHIEF.EXE into a Ghidra project, replacing any previous
-# import, and runs the Win16 fixups around auto-analysis.
+# import, runs the Win16 fixups around auto-analysis and applies the
+# recovered symbols in tools/ghidra/symbols/.
 #
 # Usage: tools/ghidra/analyze.sh [project-dir]
 #
@@ -17,4 +18,5 @@ exec ghidra-headless "$project_dir" "$repo_name" \
 	-overwrite \
 	-scriptPath "$repo_root/tools/ghidra/scripts" \
 	-preScript PrepareWin16.java \
-	-postScript FixupWin16.java
+	-postScript FixupWin16.java \
+	-postScript ApplySymbols.java

@@ -57,6 +57,7 @@ public final class Win16Api {
 	private static final String FAR_PASCAL = "__stdcall16far";
 	private static final String FAR_CDECL = "__cdecl16far";
 	private static final int FAR_POINTER_SIZE = 4;
+	private static final int NEAR_POINTER_SIZE = 2;
 	private static final int FAR_RETURN_ADDRESS_SIZE = 4;
 	private static final int STACK_SLOT_SIZE = 2;
 
@@ -65,6 +66,8 @@ public final class Win16Api {
 		Pattern.compile("(__cdecl\\s+)?(\\w+)\\s+(\\w+)\\s*\\((.*)\\)\\s*;");
 	// TYPE name[COUNT]
 	private static final Pattern DECLARATOR = Pattern.compile("(\\w+)\\s+(\\w+)(?:\\[(\\d+)\\])?");
+	// TYPE[COUNT]
+	private static final Pattern ARRAY_SPEC = Pattern.compile("(\\w+)(?:\\[(\\d+)\\])?");
 
 	private final Program program;
 	private final DataTypeManager dtm;
@@ -187,6 +190,7 @@ public final class Win16Api {
 		farPointer("LPSTR", type("char"));
 		farPointer("LPCSTR", type("char"));
 		farPointer("LPVOID", type("void"));
+		nearPointer("NPSTR", type("char"));
 		// Callback signatures vary, so code pointers stay untyped.
 		for (String proc : List.of("FARPROC", "WNDPROC", "DLGPROC", "TIMERPROC")) {
 			farPointer(proc, type("void"));
@@ -207,6 +211,8 @@ public final class Win16Api {
 			"WORD biPlanes", "WORD biBitCount", "DWORD biCompression", "DWORD biSizeImage",
 			"LONG biXPelsPerMeter", "LONG biYPelsPerMeter", "DWORD biClrUsed",
 			"DWORD biClrImportant");
+		struct("BITMAP", "int bmType", "int bmWidth", "int bmHeight", "int bmWidthBytes",
+			"BYTE bmPlanes", "BYTE bmBitsPixel", "LPVOID bmBits");
 		struct("RGBQUAD", "BYTE rgbBlue", "BYTE rgbGreen", "BYTE rgbRed", "BYTE rgbReserved");
 		struct("BITMAPINFO", "BITMAPINFOHEADER bmiHeader", "RGBQUAD bmiColors[1]");
 		for (String struct : List.of("POINT", "RECT", "MSG", "PAINTSTRUCT", "WNDCLASS",
@@ -224,22 +230,47 @@ public final class Win16Api {
 		typedef(name, new PointerDataType(target, FAR_POINTER_SIZE, dtm));
 	}
 
-	// Members are laid out back to back: every Win16 struct used here is
-	// already naturally aligned, so no packing rules are needed.
+	private void nearPointer(String name, DataType target) {
+		typedef(name, new PointerDataType(target, NEAR_POINTER_SIZE, dtm));
+	}
+
 	private void struct(String name, String... members) {
-		StructureDataType struct = new StructureDataType(CATEGORY, name, 0, dtm);
+		defineStruct(CATEGORY, name, members);
+	}
+
+	/**
+	 * Defines a struct from "TYPE name" or "TYPE name[N]" members, and makes it
+	 * available to {@link #type} and {@link #resolve}.
+	 */
+	public void defineStruct(CategoryPath category, String name, String... members) {
+		// Members are laid out back to back: every 16-bit struct used so far is
+		// already naturally aligned, so no packing rules are needed.
+		StructureDataType struct = new StructureDataType(category, name, 0, dtm);
 		for (String member : members) {
-			Matcher declarator = DECLARATOR.matcher(member);
+			Matcher declarator = DECLARATOR.matcher(member.strip());
 			if (!declarator.matches()) {
 				throw new IllegalArgumentException("Bad member of " + name + ": " + member);
 			}
 			DataType type = type(declarator.group(1));
 			if (declarator.group(3) != null) {
-				int count = Integer.parseInt(declarator.group(3));
-				type = new ArrayDataType(type, count, type.getLength(), dtm);
+				type = array(type, Integer.parseInt(declarator.group(3)));
 			}
 			struct.add(type, declarator.group(2), null);
 		}
 		types.put(name, dtm.addDataType(struct, DataTypeConflictHandler.REPLACE_HANDLER));
+	}
+
+	/** Resolves "TYPE" or "TYPE[N]". */
+	public DataType resolve(String spec) {
+		Matcher array = ARRAY_SPEC.matcher(spec.strip());
+		if (!array.matches()) {
+			throw new IllegalArgumentException("Bad type: " + spec);
+		}
+		DataType type = type(array.group(1));
+		return array.group(2) != null ? array(type, Integer.parseInt(array.group(2))) : type;
+	}
+
+	private DataType array(DataType element, int count) {
+		return new ArrayDataType(element, count, element.getLength(), dtm);
 	}
 }
