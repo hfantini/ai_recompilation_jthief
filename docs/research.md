@@ -168,10 +168,73 @@ checked against the running game yet. Names refer to
 
 ### Open questions
 
-- A `SPLASH` window class that paints `winlogo.bmp` and `jwlthief.bmp` from
-  disk is registered, but no code creating such a window has been found.
-- The exact menu ids of the help commands.
-- The names of the three speeds and the cursor size, to confirm in the game.
+- Behavior still to confirm in the running game: the real pace, guard
+  movement and the scenery drawing.
+
+## Resources (v1.4)
+
+Listed with `tools/ne.py info`; the menu, dialogs and accelerators were
+decoded from the extracted resources.
+
+### Bitmaps
+
+All bitmaps are 16-color (4 bpp), except `STAR` (1 bpp). The art itself is
+therefore palette-safe; the high-color glitch comes from drawing it with
+ROP `0x990066`.
+
+| Group   | Bitmaps | Size |
+|---------|---------|------|
+| Jewels  | the 14 jewel names | 10x10 to 19x20 |
+| Guards  | the 14 guard names | 11x18 (`RAINDROP`) to 62x21 (`CLOUD`) |
+| Scenery | `STAR` 9x9, `SPHINX` 72x55, `WATER` 72x72, `CAVE` 500x150, `CASTLE` 88x100, `CITY` 500x92 | |
+| Status  | `STATUSBR`, source of the status bar icons | 280x19 |
+
+The cloud scene has no bitmap of its own: it is drawn with arcs and reuses
+the `CLOUD` guard bitmap.
+
+### Cursors and icon
+
+`RIGHTCUR` and `LEFTCUR` are 32x32 with the hotspot at (0, 0), which matches
+the 8–24 pixel collision box. `FUNICON` is the application icon.
+
+### Menu `JWLTHIEFMENU`
+
+| Id  | Command | Accelerator |
+|-----|---------|-------------|
+| 110 | Game › New... (asks for confirmation) | F2 |
+| 115 | New game without confirmation; posted internally after "Play again?" | |
+| 120 | Game › Pause | F3 |
+| 130 | Game › Options... | |
+| 140 | Game › High Scores | |
+| 190 | Game › Exit | Alt-F4 |
+| 210 | Help › Contents | |
+| 220 | Help › Search for Help on... | |
+| 230 | Help › How to Use Help | |
+| 240 | Help › About Jewel Thief... | |
+
+### Dialogs
+
+| Resource   | Purpose |
+|------------|---------|
+| `400`      | Options: speed (Beginner, Intermediate, Expert = `Speed` 0, 1, 2), pause after each level (`LevelWait`), cheat mode (`Cheat`) |
+| `600`      | Registration: serial number entry |
+| `700`      | High score table, 10 lines |
+| `800`      | New high score: name entry |
+| `900`      | About, with two `SPLASH` controls |
+| `PAUSEBOX` | Pause bar with a Play button |
+| `WAITBOX`  | "Get ready" box shown between levels |
+| `HINTSBOX`, `INSTRBOX`, `STORYBOX` | Hints, instructions and story. Not referenced by v1.4 code, which sends help to WinHelp; likely left over from earlier versions |
+
+`SPLASH` is a custom control class used only in the About dialog. Each
+instance paints a `.bmp` file from the game directory, chosen by its window
+style: 0 is `winlogo.bmp`, 1 is `jwlthief.bmp`.
+
+## Project decisions
+
+- **Fidelity target:** a modern port that preserves the gameplay as closely
+  as possible (rules, formulas, pace), not a bit-exact replica. Known flaws
+  of the original are fixed: sprites are drawn with masks or transparency
+  instead of a palette-dependent ROP, so they work at any color depth.
 
 ## Sources
 
