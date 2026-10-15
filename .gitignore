@@ -14,3 +14,8 @@ __pycache__/
 
 # Web port dependencies
 /node_modules/
+
+# Android port: Gradle caches and the local SDK path
+/src/platform/android/.gradle/
+/src/platform/android/.kotlin/
+/src/platform/android/local.properties

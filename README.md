@@ -4,8 +4,8 @@ A native reimplementation of **Jewel Thief** (Paul Ligeski / ServantWare,
 1991–1993), the 16-bit Windows 3.x game where the mouse cursor is a thief
 stealing jewels from guards. Rebuilt in C99 from a reverse engineering of
 the original, it plays like the original, down to its formulas, its pace and
-its quirks, built for every Windows from XP to 11, for Linux and for the
-browser.
+its quirks, built for every Windows from XP to 11, for Linux, for the
+browser and for Android.
 
 The repository holds **no original code or assets**. The game loads its
 graphics, cursors, menu, dialogs and texts at runtime from your own copy of
@@ -23,11 +23,12 @@ the original `JWLTHIEF.EXE` v1.4.
   display, without the original's high-color glitch.
 - **Same dialogs and menu on Windows.** They are built from the original's
   own Windows 3.x templates, converted to Win32 on the fly. The Linux build
-  uses native GTK 4 menus and dialogs instead, and the browser build HTML
-  ones, still with the original's texts; only their gameplay is kept
-  faithful.
-- **One game everywhere.** The browser build runs the same C code, compiled
-  to WebAssembly, so it plays exactly like the native ones.
+  uses native GTK 4 menus and dialogs instead, the browser build HTML ones
+  and the Android build Android ones, still with the original's texts; only
+  their gameplay is kept faithful.
+- **One game everywhere.** The browser and Android builds run the same C
+  code, compiled to WebAssembly and for the NDK, so they play exactly like
+  the desktop ones.
 - **Compatible settings.** Options and high scores live in the original's
   `SERVANT.INI`, in its own format, next to `JWLTHIEF.EXE`. The browser keeps
   the same keys and values in its local storage.
@@ -54,6 +55,7 @@ jthief_64.exe [--debug] [folder of JWLTHIEF.EXE]
 | `jthief_32.exe` | Windows XP to Windows 11      |
 | `jthief_64.exe` | 64-bit Windows                |
 | `jthief`        | Linux, with GTK 4             |
+| `app-debug.apk` | Android 8.0 and newer         |
 
 ### In the browser
 
@@ -61,6 +63,14 @@ Open the page and pick or drop your `JWLTHIEF.EXE`. It is checked and read
 in the browser, never uploaded, and kept in the browser's storage so it is
 asked for only once. The game is shown at the largest whole number of
 screen pixels per game pixel, up to two, so it stays sharp at any zoom.
+
+### On Android
+
+The first start asks for your `JWLTHIEF.EXE` and copies it into the app,
+where `SERVANT.INI` is kept too. The screen works as a trackpad: drag
+anywhere and the thief moves as far as your finger, so it never jumps and
+stays put when you lift your finger, like a mouse let go. Back pauses, and
+the pause box holds the menu.
 
 ### Controls
 
@@ -73,7 +83,13 @@ screen pixels per game pixel, up to two, so it stays sharp at any zoom.
 ### Debug mode
 
 `--debug`, or `?debug` in the browser's address, turns on keys the original
-never had, and the title bar shows `[DEBUG]` while it is on:
+never had, and the title bar shows `[DEBUG]` while it is on. On Android, the
+app's `debug` extra adds the same commands to the pause box:
+
+```sh
+adb shell am start -n io.github.hfantini.jthief/.MainActivity --ez debug true
+```
+
 
 | Key                     | Action |
 |-------------------------|--------|
@@ -133,6 +149,24 @@ npm run wasm
 npm run dev
 ```
 
+The Android build needs JDK 17 or newer and the Android SDK with the
+command-line tools, platform 36, NDK 30 and CMake 4.1.2, with `ANDROID_HOME`
+pointing at the SDK. Its Gradle project in `src/platform/android/` builds the
+game with the repository's `CMakeLists.txt` and writes everything to
+`build/android/`; the Gradle wrapper downloads Gradle itself:
+
+```sh
+cd src/platform/android
+./gradlew assembleDebug                       # build/android/app/outputs/apk/debug/app-debug.apk
+./gradlew installDebug                        # onto the phone adb is connected to
+```
+
+Android launchers only show icons built into the app. When `original/`
+holds the original, the build makes the launcher icon from the original's
+own icon, with a small tool it compiles from the game's C code with the host's
+`cc`; the icon stays in `build/`, and such an app is for your own device.
+Without the original, the app gets the port's own icon.
+
 The tests run on the `linux` preset; those needing the original look for it
 in `original/` (override with `-DJT_ORIGINAL_DIR=<dir>`) and are skipped
 without it:
@@ -144,15 +178,16 @@ ctest --test-dir build/linux --output-on-failure
 
 ## Architecture
 
-Everything but `src/platform/` is portable C99 with no Windows, GTK or
-browser dependency. The browser build compiles it to WebAssembly together
+Everything but `src/platform/` is portable C99 with no Windows, GTK,
+browser or Android dependency. The browser build compiles it to WebAssembly together
 with `platform/web/bridge`, a flat API that the TypeScript side in
 `platform/web/app` calls: the browser owns the loop, and the C code answers
-ticks and mouse moves and renders the frames.
+ticks and mouse moves and renders the frames. The Android build works the
+same way, with `platform/android/jni` as the C side of its Kotlin app.
 
 ```mermaid
 flowchart TD
-    platform["platform/win32, platform/gtk, platform/web<br/>window, input, clock, dialogs"]
+    platform["platform/win32, gtk, web, android<br/>window, input, clock, dialogs"]
     profile["profile<br/>SERVANT.INI"]
     render["render<br/>frames and scenery"]
     core["core<br/>rules, RNG, high scores, settings"]
@@ -189,6 +224,7 @@ flowchart TD
 | `src/platform/gtk/`      | Linux: GTK 4 window, menu, clock thread and dialogs |
 | `src/platform/web/bridge/` | Browser: the C API compiled to WebAssembly with the game |
 | `src/platform/web/app/`  | Browser: TypeScript page, canvas, clock, menu and dialogs |
+| `src/platform/android/`  | Android: Gradle project, Kotlin app (view, trackpad, clock, dialogs) and `jni/`, its C side |
 | `tests/`                 | CTest suite |
 | `tools/ne.py`            | Inspect an NE executable or extract its resources |
 | `tools/ghidra/`          | Headless Ghidra pipeline used to reverse engineer the original |

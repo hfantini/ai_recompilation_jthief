@@ -72,8 +72,12 @@ add_library(jt_profile STATIC src/profile/profile.c)
 target_include_directories(jt_profile PUBLIC src/profile)
 target_link_libraries(jt_profile PUBLIC jt_core jt_assets jt_common)
 
+# --- game: native library of the Android port, built by its Gradle project ---
+if(ANDROID)
+    add_library(jthief SHARED src/platform/android/jni/jni.c)
+    target_link_libraries(jthief PRIVATE jt_render jt_profile jt_core jt_assets jnigraphics)
 # --- game: WebAssembly module for the browser port ----------------------------
-if(EMSCRIPTEN)
+elseif(EMSCRIPTEN)
     add_executable(jthief src/platform/web/bridge/bridge.c)
     target_link_libraries(jthief PRIVATE jt_render jt_core jt_assets)
     # An ES module exporting a factory, imported by the TypeScript side.
