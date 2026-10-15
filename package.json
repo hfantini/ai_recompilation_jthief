@@ -1,0 +1,17 @@
+{
+  "name": "jthief-web",
+  "private": true,
+  "type": "module",
+  "description": "Browser port of Jewel Thief: the native game compiled to WebAssembly, with a TypeScript front end.",
+  "scripts": {
+    "wasm": "cmake --preset wasm && cmake --build --preset wasm",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

@@ -4,7 +4,8 @@ A native reimplementation of **Jewel Thief** (Paul Ligeski / ServantWare,
 1991–1993), the 16-bit Windows 3.x game where the mouse cursor is a thief
 stealing jewels from guards. Rebuilt in C99 from a reverse engineering of
 the original, it plays like the original, down to its formulas, its pace and
-its quirks, built for every Windows from XP to 11 and for Linux.
+its quirks, built for every Windows from XP to 11, for Linux and for the
+browser.
 
 The repository holds **no original code or assets**. The game loads its
 graphics, cursors, menu, dialogs and texts at runtime from your own copy of
@@ -22,10 +23,14 @@ the original `JWLTHIEF.EXE` v1.4.
   display, without the original's high-color glitch.
 - **Same dialogs and menu on Windows.** They are built from the original's
   own Windows 3.x templates, converted to Win32 on the fly. The Linux build
-  uses native GTK 4 menus and dialogs instead, still with the original's
-  texts; only its gameplay is kept faithful.
+  uses native GTK 4 menus and dialogs instead, and the browser build HTML
+  ones, still with the original's texts; only their gameplay is kept
+  faithful.
+- **One game everywhere.** The browser build runs the same C code, compiled
+  to WebAssembly, so it plays exactly like the native ones.
 - **Compatible settings.** Options and high scores live in the original's
-  `SERVANT.INI`, in its own format, next to `JWLTHIEF.EXE`.
+  `SERVANT.INI`, in its own format, next to `JWLTHIEF.EXE`. The browser keeps
+  the same keys and values in its local storage.
 
 How the original works and what the port does about it is documented in
 [`docs/research.md`](docs/research.md).
@@ -50,6 +55,13 @@ jthief_64.exe [--debug] [folder of JWLTHIEF.EXE]
 | `jthief_64.exe` | 64-bit Windows                |
 | `jthief`        | Linux, with GTK 4             |
 
+### In the browser
+
+Open the page and pick or drop your `JWLTHIEF.EXE`. It is checked and read
+in the browser, never uploaded, and kept in the browser's storage so it is
+asked for only once. The game is shown at the largest whole number of
+screen pixels per game pixel, up to two, so it stays sharp at any zoom.
+
 ### Controls
 
 | Input | Action |
@@ -60,8 +72,8 @@ jthief_64.exe [--debug] [folder of JWLTHIEF.EXE]
 
 ### Debug mode
 
-`--debug` turns on keys the original never had, and the title bar shows
-`[DEBUG]` while it is on:
+`--debug`, or `?debug` in the browser's address, turns on keys the original
+never had, and the title bar shows `[DEBUG]` while it is on:
 
 | Key                     | Action |
 |-------------------------|--------|
@@ -76,6 +88,16 @@ one needs GTK 4; all need CMake 3.21 or newer. On Fedora:
 ```sh
 sudo dnf install cmake mingw32-gcc mingw64-gcc   # wine, to run the builds on Linux
 sudo dnf install gcc gtk4-devel                  # the Linux build
+sudo dnf install nodejs                          # the browser build, with emsdk below
+```
+
+The browser build compiles the game with [Emscripten](https://emscripten.org/),
+installed with its SDK, which the `wasm` preset finds through `$EMSDK`:
+
+```sh
+git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+~/emsdk/emsdk install latest && ~/emsdk/emsdk activate latest
+source ~/emsdk/emsdk_env.sh                      # in each shell, or in ~/.bashrc
 ```
 
 Each preset builds in `build/<preset>/` and puts the game in
@@ -88,6 +110,7 @@ Each preset builds in `build/<preset>/` and puts the game in
 | `win32-debug`   | `bin/debug/jthief_32.exe`    |
 | `win64-debug`   | `bin/debug/jthief_64.exe`    |
 | `linux`         | `bin/debug/jthief` and tests |
+| `wasm`          | `build/wasm/jthief.js` and `jthief.wasm`, for the browser build |
 
 ```sh
 cmake --preset win64-release
@@ -97,6 +120,17 @@ wine bin/release/jthief_64.exe original/
 cmake --preset linux
 cmake --build --preset linux
 bin/debug/jthief original/
+```
+
+The browser build is driven by npm from the repository's root: `npm run wasm`
+runs the `wasm` preset, `npm run dev` serves the game at
+`http://localhost:5173` and reloads it on changes, and `npm run build` puts a
+static site in `bin/web/`:
+
+```sh
+npm install
+npm run wasm
+npm run dev
 ```
 
 The tests run on the `linux` preset; those needing the original look for it
@@ -110,12 +144,15 @@ ctest --test-dir build/linux --output-on-failure
 
 ## Architecture
 
-Everything but `src/platform/` is portable C99 with no Windows or GTK
-dependency.
+Everything but `src/platform/` is portable C99 with no Windows, GTK or
+browser dependency. The browser build compiles it to WebAssembly together
+with `platform/web/bridge`, a flat API that the TypeScript side in
+`platform/web/app` calls: the browser owns the loop, and the C code answers
+ticks and mouse moves and renders the frames.
 
 ```mermaid
 flowchart TD
-    platform["platform/win32, platform/gtk<br/>window, input, clock, dialogs"]
+    platform["platform/win32, platform/gtk, platform/web<br/>window, input, clock, dialogs"]
     profile["profile<br/>SERVANT.INI"]
     render["render<br/>frames and scenery"]
     core["core<br/>rules, RNG, high scores, settings"]
@@ -150,6 +187,8 @@ flowchart TD
 | `src/common/`            | SHA-256, file system and INI helpers |
 | `src/platform/win32/`    | Window, menu, clock thread, dialogs, Windows 3.x template conversion |
 | `src/platform/gtk/`      | Linux: GTK 4 window, menu, clock thread and dialogs |
+| `src/platform/web/bridge/` | Browser: the C API compiled to WebAssembly with the game |
+| `src/platform/web/app/`  | Browser: TypeScript page, canvas, clock, menu and dialogs |
 | `tests/`                 | CTest suite |
 | `tools/ne.py`            | Inspect an NE executable or extract its resources |
 | `tools/ghidra/`          | Headless Ghidra pipeline used to reverse engineer the original |

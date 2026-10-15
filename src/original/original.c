@@ -18,23 +18,34 @@ typedef struct {
     bool found;
 } FindContext;
 
-bool original_is_supported_exe(const char *path)
+bool original_is_supported_data(const uint8_t *data, size_t size)
 {
     uint8_t digest[SHA256_DIGEST_SIZE];
+
+    if (data == NULL || size != ORIGINAL_EXE_SIZE) {
+        return false;
+    }
+    sha256_digest(data, size, digest);
+    return memcmp(digest, ORIGINAL_EXE_SHA256, sizeof(digest)) == 0;
+}
+
+bool original_is_supported_exe(const char *path)
+{
     uint64_t size;
     uint8_t *data;
     size_t length;
+    bool supported;
 
-    /* Cheap size check first, so unrelated files are never hashed. */
+    /* Cheap size check first, so unrelated files are never read. */
     if (!fs_file_size(path, &size) || size != ORIGINAL_EXE_SIZE) {
         return false;
     }
     if (!fs_read_file(path, &data, &length)) {
         return false;
     }
-    sha256_digest(data, length, digest);
+    supported = original_is_supported_data(data, length);
     free(data);
-    return memcmp(digest, ORIGINAL_EXE_SHA256, sizeof(digest)) == 0;
+    return supported;
 }
 
 static bool check_candidate(const char *path, void *context)

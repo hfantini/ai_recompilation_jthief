@@ -1,0 +1,268 @@
+:root {
+  --background: #1e2126;
+  --surface: #2a2e35;
+  --text: #e6e6e6;
+  --muted: #9aa0a8;
+  --border: #444a53;
+  --hover: #383d45;
+  --accent: #3b82c4;
+  --error: #f08080;
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--background);
+  color: var(--text);
+}
+
+.menu-bar {
+  display: flex;
+  gap: 0.25rem;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--surface);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu-title,
+.menu-items button {
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu-title {
+  padding: 0.3rem 0.7rem;
+}
+
+.menu-title:hover,
+.menu.open .menu-title {
+  background: var(--hover);
+}
+
+.menu-items {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 1;
+  display: none;
+  min-width: 13rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.4);
+}
+
+.menu.open .menu-items {
+  display: grid;
+}
+
+.menu-items button {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
+
+.menu-items button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.menu-items kbd {
+  color: var(--muted);
+  font: inherit;
+}
+
+.menu-items button:hover kbd {
+  color: inherit;
+}
+
+.menu-items hr {
+  width: 100%;
+  margin: 0.25rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.stage {
+  display: grid;
+  place-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Scaled by whole device pixels (see scale.ts), which must not be smoothed. */
+.game {
+  display: block;
+  background: #000;
+  image-rendering: pixelated;
+}
+
+.screen {
+  position: relative;
+}
+
+/* Laid over the canvas until the original is loaded. */
+.picker {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  background: var(--surface);
+  border: 2px dashed var(--muted);
+}
+
+.picker[hidden] {
+  display: none;
+}
+
+.picker.dragging {
+  border-color: var(--accent);
+}
+
+.picker p {
+  margin: 0;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.message {
+  color: var(--error);
+}
+
+.button {
+  padding: 0.4rem 0.9rem;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dialog {
+  min-width: 16rem;
+  max-width: 28rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* The game stays visible under the dialogs, as under the original's. */
+.dialog::backdrop {
+  background: transparent;
+}
+
+.dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.dialog p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.dialog .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.dialog .actions:empty {
+  display: none;
+}
+
+.dialog button {
+  min-width: 5rem;
+  padding: 0.35rem 0.8rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dialog .actions button:first-child:not(:last-child):not(:nth-last-child(2)) {
+  margin-right: auto;
+}
+
+.dialog fieldset {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.dialog .option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dialog > .option + .option {
+  margin-top: 0.4rem;
+}
+
+.dialog .name {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+}
+
+.dialog p + p {
+  margin-top: 0.5rem;
+}
+
+.scores {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.scores td {
+  padding: 0.15rem 0.5rem;
+}
+
+.scores td:nth-child(-n + 2) {
+  text-align: right;
+}
+
+/* The original shows an hourglass while the "Get ready" box is up. */
+.dialog.waiting::backdrop {
+  cursor: wait;
+}

@@ -11,3 +11,6 @@
 /bin/
 /extracted/
 __pycache__/
+
+# Web port dependencies
+/node_modules/

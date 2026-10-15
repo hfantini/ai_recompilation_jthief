@@ -72,8 +72,22 @@ add_library(jt_profile STATIC src/profile/profile.c)
 target_include_directories(jt_profile PUBLIC src/profile)
 target_link_libraries(jt_profile PUBLIC jt_core jt_assets jt_common)
 
+# --- game: WebAssembly module for the browser port ----------------------------
+if(EMSCRIPTEN)
+    add_executable(jthief src/platform/web/bridge/bridge.c)
+    target_link_libraries(jthief PRIVATE jt_render jt_core jt_assets)
+    # An ES module exporting a factory, imported by the TypeScript side.
+    target_link_options(jthief PRIVATE
+        -sMODULARIZE=1
+        -sEXPORT_ES6=1
+        -sEXPORT_NAME=createJewelThief
+        -sENVIRONMENT=web
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXPORTED_FUNCTIONS=_malloc,_free
+        -sEXPORTED_RUNTIME_METHODS=HEAPU8
+    )
 # --- game: Windows build (jthief_32.exe or jthief_64.exe) --------------------
-if(WIN32)
+elseif(WIN32)
     add_executable(jthief WIN32
         src/platform/win32/main.c
         src/platform/win32/dialogs.c

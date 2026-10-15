@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jewel Thief</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <nav id="menu-bar" class="menu-bar"></nav>
+    <main class="stage">
+      <div class="screen">
+        <canvas id="game" class="game"></canvas>
+        <div id="picker" class="picker" hidden>
+          <p>This port plays with the graphics of your own copy of Jewel Thief v1.4.</p>
+          <label class="button">
+            Choose JWLTHIEF.EXE
+            <input id="picker-input" type="file" accept=".exe,.EXE" hidden />
+          </label>
+          <p class="hint">or drop it here. It never leaves your browser.</p>
+          <p id="picker-message" class="message"></p>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

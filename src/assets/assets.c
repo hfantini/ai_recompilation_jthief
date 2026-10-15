@@ -20,9 +20,25 @@ static int find_original(const char *const *dirs, size_t dir_count, char *path, 
     return -1;
 }
 
+/* Takes ownership of `data`; `assets` must be zeroed. */
+static AssetsStatus open_image(Assets *assets, uint8_t *data, size_t size)
+{
+    assets->exe_data = data;
+    assets->exe_size = size;
+    if (ne_image_open(&assets->image, data, size) != NE_OK
+        || ne_image_auto_data_segment(&assets->image, &assets->data_segment) != NE_OK) {
+        assets_close(assets);
+        return ASSETS_ERR_MALFORMED;
+    }
+    return ASSETS_OK;
+}
+
 AssetsStatus assets_open(Assets *assets, const char *const *dirs, size_t dir_count)
 {
     char path[FS_MAX_PATH];
+    uint8_t *data;
+    size_t size;
+    AssetsStatus status;
     int found;
 
     memset(assets, 0, sizeof(*assets));
@@ -30,16 +46,24 @@ AssetsStatus assets_open(Assets *assets, const char *const *dirs, size_t dir_cou
     if (found < 0 || strlen(dirs[found]) >= sizeof(assets->dir)) {
         return ASSETS_ERR_NOT_FOUND;
     }
-    strcpy(assets->dir, dirs[found]);
-    if (!fs_read_file(path, &assets->exe_data, &assets->exe_size)) {
+    if (!fs_read_file(path, &data, &size)) {
         return ASSETS_ERR_UNREADABLE;
     }
-    if (ne_image_open(&assets->image, assets->exe_data, assets->exe_size) != NE_OK
-        || ne_image_auto_data_segment(&assets->image, &assets->data_segment) != NE_OK) {
-        assets_close(assets);
-        return ASSETS_ERR_MALFORMED;
+    status = open_image(assets, data, size);
+    if (status == ASSETS_OK) {
+        strcpy(assets->dir, dirs[found]);
     }
-    return ASSETS_OK;
+    return status;
+}
+
+AssetsStatus assets_open_memory(Assets *assets, uint8_t *data, size_t size)
+{
+    memset(assets, 0, sizeof(*assets));
+    if (!original_is_supported_data(data, size)) {
+        free(data);
+        return ASSETS_ERR_NOT_FOUND;
+    }
+    return open_image(assets, data, size);
 }
 
 const char *assets_text(const Assets *assets, AssetsText text)

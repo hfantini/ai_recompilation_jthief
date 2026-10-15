@@ -55,6 +55,14 @@ typedef struct {
 /* Searches `dirs` in order; NULL entries are skipped. */
 AssetsStatus assets_open(Assets *assets, const char *const *dirs, size_t dir_count);
 
+/*
+ * Opens an original already read into memory, such as a file the user picked
+ * in a browser; ASSETS_ERR_NOT_FOUND means the bytes are not the original.
+ * Takes ownership of `data`, a malloc'ed buffer, even on failure. `dir` is
+ * left empty.
+ */
+AssetsStatus assets_open_memory(Assets *assets, uint8_t *data, size_t size);
+
 void assets_close(Assets *assets);
 
 /* Finds a BITMAP resource by name; the result borrows from `assets`. */

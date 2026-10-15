@@ -11,11 +11,15 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #define ORIGINAL_EXE_SIZE 131072u
 #define ORIGINAL_EXE_SHA256_HEX "c764beb9d16d5a4a2870d794b65219b4e92649ceac1bffbd13f31254ee6d21f2"
 
 bool original_is_supported_exe(const char *path);
+
+/* Same check on bytes already in memory, such as a file picked in a browser. */
+bool original_is_supported_data(const uint8_t *data, size_t size);
 
 /* Scans the files directly inside `dir` and writes the first match to `out`. */
 bool original_find_in_dir(const char *dir, char *out, size_t capacity);
