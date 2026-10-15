@@ -317,6 +317,47 @@ possible (rules, formulas, pace, quirks), not a bit-exact replica.
 - **Windows versions:** the 32-bit build is compiled against the Windows XP
   API (`_WIN32_WINNT=0x0501`) and runs from XP to 11; the 64-bit build
   targets modern Windows.
+- **No floating point:** the shapes of the scenery are computed with
+  integers only, in doubled coordinates where pixel centers and pen edges
+  fall on whole numbers, and angles are compared with cross products
+  instead of `atan2`. The result is the same, pixel for pixel, and the
+  MS-DOS build runs on a 386 without a math coprocessor.
+
+### MS-DOS
+
+The DOS build has to stand in for Windows 3.1 itself. Much of what the other
+ports emulate is native there.
+
+- **Screen:** VGA mode 12h, 640x480 in 16 colors, the resolution and depth
+  the original was made for. The DAC holds the Windows VGA palette in
+  Windows order, so pixel values are the palette indices the original's
+  raster operations worked on. The window is drawn where the original's
+  `CreateWindow` put it, 500x300 at (60, 30), with the Windows 3.1 default
+  colors, caption, menu bar and dialogs.
+- **Colors:** the scenery brushes outside the 16 colors are dithered, as
+  Windows 3.1 did on a VGA, with the mix of up to three palette colors that
+  comes closest to the brush, spread with an 8x8 ordered dither. Bitmaps
+  from files, such as the About box's pictures, take the nearest colors,
+  like `SetDIBitsToDevice`.
+- **Pace:** the game ticks with the BIOS clock, the very 18.2 Hz timer that
+  paced Windows 3.1. Nothing is reprogrammed: the clock is polled.
+- **Menus and dialogs:** they are laid out from the original's templates,
+  with the dialog unit arithmetic of Windows. The VGA's ROM fonts, read from
+  the video BIOS and trimmed into a proportional face, stand in for the
+  Windows fonts; they are wider than Helv, so a dialog's horizontal unit
+  grows until its texts fit their controls. Dialogs without a font of their
+  own keep the VGA system font's units: the pause bar still covers the status
+  bar exactly.
+- **Cursor:** drawn by the game, with the AND and XOR masks of `RIGHTCUR`
+  and `LEFTCUR` applied to palette indices, as on the original's display.
+  The arrow and the hourglass, which the original took from Windows, are
+  the port's own.
+- **Speed:** only the parts of the screen that change are written to the
+  VGA, which sits on a slow bus on a 386, and nearest-color searches for
+  the sprites' raster operation are cached.
+- **Mouse moves** reach the game only over the client area, as
+  `WM_MOUSEMOVE` did, so the menu bar is free to use; moves over the status
+  bar still cost lives.
 
 ## Sources
 

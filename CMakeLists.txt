@@ -3,7 +3,12 @@ project(jthief LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+# DJGPP hides its whole POSIX and DOS API from strict ISO C.
+if(DJGPP)
+    set(CMAKE_C_EXTENSIONS ON)
+else()
+    set(CMAKE_C_EXTENSIONS OFF)
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
@@ -48,9 +53,6 @@ target_link_libraries(jt_original PUBLIC jt_common)
 # --- gfx: DIB decoding and the software framebuffer --------------------------
 add_library(jt_gfx STATIC src/gfx/dib.c src/gfx/framebuffer.c src/gfx/icon.c src/gfx/shapes.c)
 target_include_directories(jt_gfx PUBLIC src/gfx)
-if(NOT WIN32)
-    target_link_libraries(jt_gfx PUBLIC m)
-endif()
 
 # --- assets: game assets loaded from the original executable ----------------
 add_library(jt_assets STATIC src/assets/assets.c)
@@ -89,6 +91,37 @@ elseif(EMSCRIPTEN)
         -sALLOW_MEMORY_GROWTH=1
         -sEXPORTED_FUNCTIONS=_malloc,_free
         -sEXPORTED_RUNTIME_METHODS=HEAPU8
+    )
+# --- game: MS-DOS build with DJGPP (JTHIEF.EXE) -------------------------------
+elseif(DJGPP)
+    add_executable(jthief
+        src/platform/dos/main.c
+        src/platform/dos/canvas.c
+        src/platform/dos/cursor.c
+        src/platform/dos/dialog.c
+        src/platform/dos/dialogs.c
+        src/platform/dos/font.c
+        src/platform/dos/hardware.c
+        src/platform/dos/keys.c
+        src/platform/dos/menu.c
+        src/platform/dos/templates.c
+        src/platform/dos/ui.c
+        src/platform/dos/vga.c
+        src/platform/dos/window.c
+    )
+    target_link_libraries(jthief PRIVATE jt_render jt_profile jt_core jt_assets)
+    # exe2coff only accepts a .exe, which the Generic platform does not give.
+    set_target_properties(jthief PROPERTIES SUFFIX ".exe")
+    # DJGPP's own stub needs CWSDPMI.EXE next to the game. CWSDSTUB carries
+    # the DPMI host inside, so JTHIEF.EXE runs on its own.
+    set(JT_DOS_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin/$<LOWER_CASE:$<CONFIG>>")
+    add_custom_command(TARGET jthief POST_BUILD
+        COMMAND ${DJGPP_EXE2COFF} $<TARGET_FILE:jthief>
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${JT_DOS_OUTPUT_DIR}
+        COMMAND sh -c "cat \"$1\" \"$2\" > \"$3\"" sh ${DJGPP_CWSDSTUB}
+            $<TARGET_FILE_DIR:jthief>/$<TARGET_FILE_BASE_NAME:jthief>
+            ${JT_DOS_OUTPUT_DIR}/JTHIEF.EXE
+        VERBATIM
     )
 # --- game: Windows build (jthief_32.exe or jthief_64.exe) --------------------
 elseif(WIN32)

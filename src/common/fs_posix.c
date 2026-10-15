@@ -5,25 +5,59 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-bool fs_executable_dir(char *out, size_t capacity)
-{
-    ssize_t length;
-    char *last_separator;
+#ifdef __DJGPP__
+#include <crt0.h>
+#endif
 
-    if (capacity == 0) {
+static bool executable_path(char *out, size_t capacity)
+{
+#ifdef __DJGPP__
+    /* DOS has no /proc: the startup code keeps the path DOS started us from. */
+    size_t length = strlen(__dos_argv0);
+
+    if (length >= capacity) {
         return false;
     }
-    length = readlink("/proc/self/exe", out, capacity - 1);
+    memcpy(out, __dos_argv0, length + 1);
+#else
+    ssize_t length = readlink("/proc/self/exe", out, capacity - 1);
+
     if (length <= 0) {
         return false;
     }
     out[length] = '\0';
+#endif
+    return true;
+}
 
-    last_separator = strrchr(out, '/');
-    if (last_separator == NULL) {
+static char *last_separator(char *path)
+{
+    char *slash = strrchr(path, '/');
+#ifdef __DJGPP__
+    char *backslash = strrchr(path, '\\');
+
+    if (slash == NULL || (backslash != NULL && backslash > slash)) {
+        slash = backslash;
+    }
+#endif
+    return slash;
+}
+
+bool fs_executable_dir(char *out, size_t capacity)
+{
+    char *separator;
+    bool is_root;
+
+    if (capacity == 0 || !executable_path(out, capacity)) {
         return false;
     }
-    last_separator[last_separator == out ? 1 : 0] = '\0';
+    separator = last_separator(out);
+    if (separator == NULL) {
+        return false;
+    }
+    /* Roots such as "/" and "C:\" keep their separator. */
+    is_root = separator == out || separator[-1] == ':';
+    separator[is_root ? 1 : 0] = '\0';
     return true;
 }
 

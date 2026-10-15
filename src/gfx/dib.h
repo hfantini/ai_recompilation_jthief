@@ -27,7 +27,10 @@ typedef struct {
 /* Validates `data` and fills `dib` with views into it; nothing is copied. */
 bool dib_parse(const uint8_t *data, size_t size, Dib *dib);
 
-/* Palette index of the pixel at (x, y), counted from the top-left corner. */
+/* The same for a .bmp file, which has a BITMAPFILEHEADER in front. */
+bool dib_parse_file(const uint8_t *data, size_t size, Dib *dib);
+
+/* Palette index of the pixel at (x, y), counted from the top-left corner; palettized DIBs only. */
 uint8_t dib_pixel_index(const Dib *dib, int32_t x, int32_t y);
 
 /* Palette entry as 0x00RRGGBB; black for indices past the palette. */

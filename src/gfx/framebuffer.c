@@ -2,16 +2,17 @@
 
 #include <stdlib.h>
 
-#define VGA_COLORS 16
 #define WHITE FB_RGB(0xFF, 0xFF, 0xFF)
+#define NEAREST_CACHE_SIZE 256
+#define PALETTE_SIZE 256
 
 /*
- * The 16 Windows VGA colors, in device palette order. Color 15 - n is the
- * complement of color n, which is what made index arithmetic look right.
+ * Color 15 - n is the complement of color n, which is what made index
+ * arithmetic look right.
  * The 256-color static palette keeps these at indices 0-7 and 248-255, so
  * the same ROP gave the same result there too.
  */
-static const uint32_t VGA_PALETTE[VGA_COLORS] = {
+const uint32_t FB_VGA_PALETTE[FB_VGA_COLORS] = {
     FB_RGB(0x00, 0x00, 0x00), FB_RGB(0x80, 0x00, 0x00), FB_RGB(0x00, 0x80, 0x00),
     FB_RGB(0x80, 0x80, 0x00), FB_RGB(0x00, 0x00, 0x80), FB_RGB(0x80, 0x00, 0x80),
     FB_RGB(0x00, 0x80, 0x80), FB_RGB(0xC0, 0xC0, 0xC0), FB_RGB(0x80, 0x80, 0x80),
@@ -33,15 +34,15 @@ static int channel_distance(uint32_t a, uint32_t b, int shift)
     return delta * delta;
 }
 
-static unsigned nearest_vga_index(uint32_t color)
+static unsigned search_nearest(uint32_t color)
 {
     unsigned best = 0, i;
     int best_distance = -1;
 
-    for (i = 0; i < VGA_COLORS; i++) {
-        int distance = channel_distance(color, VGA_PALETTE[i], 16)
-                     + channel_distance(color, VGA_PALETTE[i], 8)
-                     + channel_distance(color, VGA_PALETTE[i], 0);
+    for (i = 0; i < FB_VGA_COLORS; i++) {
+        int distance = channel_distance(color, FB_VGA_PALETTE[i], 16)
+                     + channel_distance(color, FB_VGA_PALETTE[i], 8)
+                     + channel_distance(color, FB_VGA_PALETTE[i], 0);
         if (best_distance < 0 || distance < best_distance) {
             best = i;
             best_distance = distance;
@@ -50,10 +51,22 @@ static unsigned nearest_vga_index(uint32_t color)
     return best;
 }
 
-static uint32_t dsxn(uint32_t dest, uint32_t src)
+/* Sprites need this for every pixel, among the few colors a game uses: they are remembered. */
+unsigned fb_nearest_vga_index(uint32_t color)
 {
-    unsigned index = ~(nearest_vga_index(dest) ^ nearest_vga_index(src)) & (VGA_COLORS - 1);
-    return VGA_PALETTE[index];
+    static struct {
+        uint32_t color;
+        uint8_t index;
+        bool used;
+    } cache[NEAREST_CACHE_SIZE];
+    unsigned slot = (color ^ (color >> 9) ^ (color >> 17)) % NEAREST_CACHE_SIZE;
+
+    if (!cache[slot].used || cache[slot].color != color) {
+        cache[slot].color = color;
+        cache[slot].index = (uint8_t)search_nearest(color);
+        cache[slot].used = true;
+    }
+    return cache[slot].index;
 }
 
 static bool clip(const Framebuffer *fb, int x, int y, int width, int height, Clip *out)
@@ -165,19 +178,29 @@ void fb_draw_bitmap_region(Framebuffer *fb, const Dib *dib, int src_x, int src_y
 
 void fb_draw_sprite(Framebuffer *fb, const Dib *dib, int x, int y)
 {
+    /* Per palette entry: its VGA index, and whether it is white. */
+    uint8_t indices[PALETTE_SIZE];
+    bool transparent[PALETTE_SIZE];
     Clip area;
+    unsigned i;
     int row, col;
 
     if (!clip(fb, x, y, dib->width, dib->height, &area)) {
         return;
     }
+    for (i = 0; i < PALETTE_SIZE; i++) {
+        uint32_t color = dib_palette_color(dib, (uint8_t)i);
+        indices[i] = (uint8_t)fb_nearest_vga_index(color);
+        /* Exact for white, and keeps backgrounds outside the VGA palette intact. */
+        transparent[i] = color == WHITE;
+    }
     for (row = 0; row < area.height; row++) {
         uint32_t *dest = fb->pixels + (size_t)(area.dst_y + row) * (size_t)fb->width + area.dst_x;
         for (col = 0; col < area.width; col++) {
-            uint32_t src = dib_pixel_color(dib, area.src_x + col, area.src_y + row);
-            /* Exact for white, and keeps backgrounds outside the VGA palette intact. */
-            if (src != WHITE) {
-                dest[col] = dsxn(dest[col], src);
+            uint8_t source = dib_pixel_index(dib, area.src_x + col, area.src_y + row);
+            if (!transparent[source]) {
+                unsigned index = ~(fb_nearest_vga_index(dest[col]) ^ indices[source]);
+                dest[col] = FB_VGA_PALETTE[index & (FB_VGA_COLORS - 1)];
             }
         }
     }

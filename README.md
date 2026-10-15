@@ -5,7 +5,7 @@ A native reimplementation of **Jewel Thief** (Paul Ligeski / ServantWare,
 stealing jewels from guards. Rebuilt in C99 from a reverse engineering of
 the original, it plays like the original, down to its formulas, its pace and
 its quirks, built for every Windows from XP to 11, for Linux, for the
-browser and for Android.
+browser, for Android and for MS-DOS on any 386.
 
 The repository holds **no original code or assets**. The game loads its
 graphics, cursors, menu, dialogs and texts at runtime from your own copy of
@@ -22,13 +22,15 @@ the original `JWLTHIEF.EXE` v1.4.
   coordinates, and sprites get the colors they had in 256 colors on any
   display, without the original's high-color glitch.
 - **Same dialogs and menu on Windows.** They are built from the original's
-  own Windows 3.x templates, converted to Win32 on the fly. The Linux build
-  uses native GTK 4 menus and dialogs instead, the browser build HTML ones
-  and the Android build Android ones, still with the original's texts; only
-  their gameplay is kept faithful.
-- **One game everywhere.** The browser and Android builds run the same C
-  code, compiled to WebAssembly and for the NDK, so they play exactly like
-  the desktop ones.
+  own Windows 3.x templates, converted to Win32 on the fly. The MS-DOS build
+  draws them itself from the same templates, on a Windows 3.1 desktop of its
+  own. The Linux build uses native GTK 4 menus and dialogs instead, the
+  browser build HTML ones and the Android build Android ones, still with the
+  original's texts; only their gameplay is kept faithful.
+- **One game everywhere.** The browser, Android and MS-DOS builds run the
+  same C code, compiled to WebAssembly, for the NDK and with DJGPP, so they
+  play exactly like the desktop ones. That code uses no floating point, so
+  it runs on a 386 without a math coprocessor.
 - **Compatible settings.** Options and high scores live in the original's
   `SERVANT.INI`, in its own format, next to `JWLTHIEF.EXE`. The browser keeps
   the same keys and values in its local storage.
@@ -56,6 +58,7 @@ jthief_64.exe [--debug] [folder of JWLTHIEF.EXE]
 | `jthief_64.exe` | 64-bit Windows                |
 | `jthief`        | Linux, with GTK 4             |
 | `app-debug.apk` | Android 8.0 and newer         |
+| `JTHIEF.EXE`    | MS-DOS, on a 386 or newer     |
 
 ### In the browser
 
@@ -72,6 +75,26 @@ anywhere and the thief moves as far as your finger, so it never jumps and
 stays put when you lift your finger, like a mouse let go. Back pauses, and
 the pause box holds the menu.
 
+### On MS-DOS
+
+`JTHIEF.EXE` needs a 386 or newer, with or without a math coprocessor, 4 MB
+of RAM, a VGA card and a mouse driver, such as
+[CuteMouse](https://cutemouse.sourceforge.net/) (`CTMOUSE`) or `MOUSE.COM`.
+It runs on MS-DOS 3.3 and newer, including the MS-DOS mode of Windows 95 and
+98, and in [DOSBox](https://www.dosbox-staging.org/). Put it next to
+`JWLTHIEF.EXE`, or pass the folder that holds the original:
+
+```bat
+C:\GAMES\JTHIEF> JTHIEF
+C:\> JTHIEF C:\GAMES\JTHIEF
+```
+
+The DPMI host, CWSDPMI, is built into the executable. Like every DJGPP
+program, it may leave an empty `CWSDPMI.SWP` in the root of drive C:, its
+swap file. The screen is drawn as Windows 3.1 showed the game on a VGA: the
+500x300 window on a 640x480 desktop, with its menu bar and dialogs. Alt or
+F10 opens the menu, as in Windows, and Alt-F4 quits.
+
 ### Controls
 
 | Input | Action |
@@ -82,9 +105,9 @@ the pause box holds the menu.
 
 ### Debug mode
 
-`--debug`, or `?debug` in the browser's address, turns on keys the original
-never had, and the title bar shows `[DEBUG]` while it is on. On Android, the
-app's `debug` extra adds the same commands to the pause box:
+`--debug`, on MS-DOS too, or `?debug` in the browser's address, turns on keys
+the original never had, and the title bar shows `[DEBUG]` while it is on. On
+Android, the app's `debug` extra adds the same commands to the pause box:
 
 ```sh
 adb shell am start -n io.github.hfantini.jthief/.MainActivity --ez debug true
@@ -116,6 +139,20 @@ git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
 source ~/emsdk/emsdk_env.sh                      # in each shell, or in ~/.bashrc
 ```
 
+The MS-DOS build uses [DJGPP](https://www.delorie.com/djgpp/), the GCC for
+DOS, from the prebuilt toolchain of
+[build-djgpp](https://github.com/andrewwutw/build-djgpp), with the CWSDPMI
+DPMI host beside it. The `dos` preset finds it through `$DJGPP_PREFIX`, or
+in `~/djgpp`. Its `ar` needs the flex runtime, which Fedora ships apart:
+
+```sh
+sudo dnf install libfl2 dosbox-staging           # dosbox-staging, to run the build
+curl -L https://github.com/andrewwutw/build-djgpp/releases/download/v3.4/djgpp-linux64-gcc1220.tar.bz2 \
+    | tar -xj -C ~
+curl -L https://www.delorie.com/pub/djgpp/current/v2misc/csdpmi7b.zip -o /tmp/csdpmi7b.zip
+unzip /tmp/csdpmi7b.zip -d ~/djgpp/cwsdpmi
+```
+
 Each preset builds in `build/<preset>/` and puts the game in
 `bin/<config>/`:
 
@@ -127,6 +164,7 @@ Each preset builds in `build/<preset>/` and puts the game in
 | `win64-debug`   | `bin/debug/jthief_64.exe`    |
 | `linux`         | `bin/debug/jthief` and tests |
 | `wasm`          | `build/wasm/jthief.js` and `jthief.wasm`, for the browser build |
+| `dos`           | `bin/release/JTHIEF.EXE`     |
 
 ```sh
 cmake --preset win64-release
@@ -136,6 +174,21 @@ wine bin/release/jthief_64.exe original/
 cmake --preset linux
 cmake --build --preset linux
 bin/debug/jthief original/
+
+cmake --preset dos
+cmake --build --preset dos
+cp original/JWLTHIEF.EXE bin/release/
+dosbox bin/release/JTHIEF.EXE
+```
+
+DOSBox always emulates a math coprocessor and fast hardware. To try the
+slowest machine the DOS build supports, a 386 with no coprocessor and a
+plain VGA, or one close to a Pentium II, [DOSBox-X](https://dosbox-x.com/)
+takes the settings in `tools/dosbox/`:
+
+```sh
+flatpak install flathub com.dosbox_x.DOSBox-X
+flatpak run com.dosbox_x.DOSBox-X -conf tools/dosbox/386.conf bin/release/JTHIEF.EXE
 ```
 
 The browser build is driven by npm from the repository's root: `npm run wasm`
@@ -179,15 +232,18 @@ ctest --test-dir build/linux --output-on-failure
 ## Architecture
 
 Everything but `src/platform/` is portable C99 with no Windows, GTK,
-browser or Android dependency. The browser build compiles it to WebAssembly together
+browser, Android or DOS dependency, and integer arithmetic only. The browser build compiles it to WebAssembly together
 with `platform/web/bridge`, a flat API that the TypeScript side in
 `platform/web/app` calls: the browser owns the loop, and the C code answers
 ticks and mouse moves and renders the frames. The Android build works the
 same way, with `platform/android/jni` as the C side of its Kotlin app.
+The MS-DOS build has no system to lean on: `platform/dos` drives the VGA,
+the mouse, the keyboard and the BIOS clock itself, and redraws the Windows
+3.1 screen around the game, menus and dialogs included.
 
 ```mermaid
 flowchart TD
-    platform["platform/win32, gtk, web, android<br/>window, input, clock, dialogs"]
+    platform["platform/win32, gtk, web, android, dos<br/>window, input, clock, dialogs"]
     profile["profile<br/>SERVANT.INI"]
     render["render<br/>frames and scenery"]
     core["core<br/>rules, RNG, high scores, settings"]
@@ -225,10 +281,12 @@ flowchart TD
 | `src/platform/web/bridge/` | Browser: the C API compiled to WebAssembly with the game |
 | `src/platform/web/app/`  | Browser: TypeScript page, canvas, clock, menu and dialogs |
 | `src/platform/android/`  | Android: Gradle project, Kotlin app (view, trackpad, clock, dialogs) and `jni/`, its C side |
+| `src/platform/dos/`      | MS-DOS: VGA, mouse, keyboard and clock, and a Windows 3.1 desktop with the original's menu and dialogs |
 | `tests/`                 | CTest suite |
 | `tools/ne.py`            | Inspect an NE executable or extract its resources |
 | `tools/ghidra/`          | Headless Ghidra pipeline used to reverse engineer the original |
-| `cmake/`                 | MinGW-w64 toolchains for 32- and 64-bit Windows |
+| `tools/dosbox/`          | DOSBox-X settings for a 386 without coprocessor and for a Pentium II |
+| `cmake/`                 | MinGW-w64 toolchains for 32- and 64-bit Windows, DJGPP toolchain for MS-DOS |
 | `docs/research.md`       | The original, its internals, and the port's decisions |
 
 ## Reverse engineering

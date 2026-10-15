@@ -1,28 +1,54 @@
 #include "shapes.h"
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
+/*
+ * Integer arithmetic only, so the DOS build runs on a 386 without a math
+ * coprocessor. Centers and pen edges fall on half pixels, so geometry is
+ * worked out in doubled coordinates, where they are whole numbers.
+ */
+
 #define MAX_POLYGON_POINTS 16
-#define TWO_PI 6.28318530717958647692
 
 typedef struct {
-    double x;
+    int x; /* first pixel at or right of the crossing */
     int direction;
 } Crossing;
 
-/* Where an ellipse's center and radii sit, in pixel coordinates. */
+/* An ellipse's center and radii, doubled. */
 typedef struct {
-    double center_x, center_y;
-    double radius_x, radius_y;
+    int center_x, center_y;
+    int radius_x, radius_y;
 } Ellipse;
+
+/* A direction on screen, doubled, with y pointing up. */
+typedef struct {
+    int x, y;
+} Ray;
 
 static void put_pixel(Framebuffer *fb, int x, int y, uint32_t color)
 {
     if (x >= 0 && y >= 0 && x < fb->width && y < fb->height) {
         fb->pixels[(size_t)y * (size_t)fb->width + (size_t)x] = color;
     }
+}
+
+static int64_t floor_div(int64_t numerator, int64_t denominator)
+{
+    int64_t quotient;
+
+    if (denominator < 0) {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+    quotient = numerator / denominator;
+    return quotient * denominator > numerator ? quotient - 1 : quotient;
+}
+
+static int64_t ceil_div(int64_t numerator, int64_t denominator)
+{
+    return -floor_div(-numerator, denominator);
 }
 
 static void sort_crossings(Crossing *crossings, int count)
@@ -36,6 +62,18 @@ static void sort_crossings(Crossing *crossings, int count)
         }
         crossings[j] = current;
     }
+}
+
+/*
+ * The first pixel whose center is at or right of where edge a-b crosses
+ * the center line of row y: ceil(crossing - 1/2).
+ */
+static int crossing_pixel(ShapePoint a, ShapePoint b, int y)
+{
+    int64_t rise = 2 * (int64_t)(b.y - a.y);
+    int64_t run = (int64_t)(2 * y + 1 - 2 * a.y) * (b.x - a.x);
+
+    return (int)ceil_div(2 * (int64_t)a.x * rise + 2 * run - rise, 2 * rise);
 }
 
 void shapes_fill_polygon(Framebuffer *fb, const ShapePoint *points, int count, uint32_t color)
@@ -53,7 +91,6 @@ void shapes_fill_polygon(Framebuffer *fb, const ShapePoint *points, int count, u
     }
 
     for (y = top; y < bottom; y++) {
-        double center_y = y + 0.5;
         int found = 0, winding = 0, k;
 
         for (i = 0; i < count; i++) {
@@ -62,10 +99,11 @@ void shapes_fill_polygon(Framebuffer *fb, const ShapePoint *points, int count, u
             int low = a.y < b.y ? a.y : b.y;
             int high = a.y < b.y ? b.y : a.y;
 
-            if (a.y == b.y || center_y < low || center_y >= high) {
+            /* Only edges spanning the row's center line, at y + 1/2. */
+            if (a.y == b.y || y < low || y >= high) {
                 continue;
             }
-            crossings[found].x = a.x + (center_y - a.y) * (b.x - a.x) / (double)(b.y - a.y);
+            crossings[found].x = crossing_pixel(a, b, y);
             crossings[found].direction = b.y > a.y ? 1 : -1;
             found++;
         }
@@ -74,9 +112,7 @@ void shapes_fill_polygon(Framebuffer *fb, const ShapePoint *points, int count, u
         for (k = 0; k + 1 < found; k++) {
             winding += crossings[k].direction;
             if (winding != 0) {
-                int from = (int)ceil(crossings[k].x - 0.5);
-                int to = (int)ceil(crossings[k + 1].x - 0.5);
-                fb_fill_rect(fb, from, y, to - from, 1, color);
+                fb_fill_rect(fb, crossings[k].x, y, crossings[k + 1].x - crossings[k].x, 1, color);
             }
         }
     }
@@ -87,60 +123,97 @@ static Ellipse ellipse_in(ShapeBox box)
     Ellipse ellipse;
 
     /* A 1-pixel outline spans left..right-1, as GDI draws it. */
-    ellipse.center_x = (box.left + box.right - 1) / 2.0;
-    ellipse.center_y = (box.top + box.bottom - 1) / 2.0;
-    ellipse.radius_x = (box.right - 1 - box.left) / 2.0;
-    ellipse.radius_y = (box.bottom - 1 - box.top) / 2.0;
+    ellipse.center_x = box.left + box.right - 1;
+    ellipse.center_y = box.top + box.bottom - 1;
+    ellipse.radius_x = box.right - 1 - box.left;
+    ellipse.radius_y = box.bottom - 1 - box.top;
     return ellipse;
 }
 
-static bool inside(double dx, double dy, double radius_x, double radius_y)
+/* Whether offset (dx, dy) lies inside the ellipse of radii (rx, ry); all doubled. */
+static bool inside(int dx, int dy, int rx, int ry)
 {
-    if (radius_x <= 0 || radius_y <= 0) {
+    int64_t rx2 = (int64_t)rx * rx, ry2 = (int64_t)ry * ry;
+
+    if (rx <= 0 || ry <= 0) {
         return false;
     }
-    return (dx * dx) / (radius_x * radius_x) + (dy * dy) / (radius_y * radius_y) <= 1.0;
+    return (int64_t)dx * dx * ry2 + (int64_t)dy * dy * rx2 <= rx2 * ry2;
 }
 
-/* Angle of (dx, dy) on screen, counterclockwise from the right, in [0, 2pi). */
-static double screen_angle(double dx, double dy)
+static int64_t cross(Ray a, Ray b)
 {
-    double angle = atan2(-dy, dx);
-    return angle < 0 ? angle + TWO_PI : angle;
+    return (int64_t)a.x * b.y - (int64_t)a.y * b.x;
+}
+
+static int64_t dot(Ray a, Ray b)
+{
+    return (int64_t)a.x * b.x + (int64_t)a.y * b.y;
+}
+
+/* 0 when `ray` is less than half a turn counterclockwise from `from`, else 1. */
+static int half_turn(Ray from, Ray ray)
+{
+    int64_t side = cross(from, ray);
+    return side > 0 || (side == 0 && dot(from, ray) > 0) ? 0 : 1;
+}
+
+/* Whether `ray` is reached strictly before `other` going counterclockwise from `from`. */
+static bool turns_before(Ray from, Ray ray, Ray other)
+{
+    int ray_half = half_turn(from, ray), other_half = half_turn(from, other);
+
+    if (ray_half != other_half) {
+        return ray_half < other_half;
+    }
+    return cross(ray, other) > 0;
+}
+
+static bool same_direction(Ray a, Ray b)
+{
+    return cross(a, b) == 0 && dot(a, b) > 0;
+}
+
+/* The counterclockwise sweep from `start` to `end`; equal rays sweep a full turn. */
+typedef struct {
+    Ray start, end;
+} Sweep;
+
+static bool in_sweep(const Sweep *sweep, Ray ray)
+{
+    /* The center has no direction; it counts as pointing right. */
+    if (ray.x == 0 && ray.y == 0) {
+        ray.x = 1;
+    }
+    return same_direction(sweep->start, sweep->end) || !turns_before(sweep->start, sweep->end, ray);
 }
 
 /*
  * Draws the pen ring of an ellipse, and its inside when `fill` is set.
- * With an arc, only the pixels between its start and end angles are drawn.
+ * With a sweep, only the pixels within it are drawn.
  */
 static void draw_ellipse(Framebuffer *fb, ShapeBox box, bool has_fill, uint32_t fill, uint32_t pen,
-                         int pen_width, const double *arc_start, double arc_span)
+                         int pen_width, const Sweep *sweep)
 {
     Ellipse e = ellipse_in(box);
-    double half = pen_width / 2.0;
-    int left = (int)floor(e.center_x - e.radius_x - half);
-    int right = (int)ceil(e.center_x + e.radius_x + half);
-    int top = (int)floor(e.center_y - e.radius_y - half);
-    int bottom = (int)ceil(e.center_y + e.radius_y + half);
+    int left = (int)floor_div(e.center_x - e.radius_x - pen_width, 2);
+    int right = (int)ceil_div(e.center_x + e.radius_x + pen_width, 2);
+    int top = (int)floor_div(e.center_y - e.radius_y - pen_width, 2);
+    int bottom = (int)ceil_div(e.center_y + e.radius_y + pen_width, 2);
     int x, y;
 
     for (y = top; y <= bottom; y++) {
         for (x = left; x <= right; x++) {
-            double dx = x - e.center_x, dy = y - e.center_y;
+            int dx = 2 * x - e.center_x, dy = 2 * y - e.center_y;
+            Ray ray = { dx, -dy };
 
-            if (!inside(dx, dy, e.radius_x + half, e.radius_y + half)) {
+            if (!inside(dx, dy, e.radius_x + pen_width, e.radius_y + pen_width)) {
                 continue;
             }
-            if (arc_start != NULL) {
-                double offset = screen_angle(dx, dy) - *arc_start;
-                if (offset < 0) {
-                    offset += TWO_PI;
-                }
-                if (offset > arc_span) {
-                    continue;
-                }
+            if (sweep != NULL && !in_sweep(sweep, ray)) {
+                continue;
             }
-            if (!inside(dx, dy, e.radius_x - half, e.radius_y - half)) {
+            if (!inside(dx, dy, e.radius_x - pen_width, e.radius_y - pen_width)) {
                 put_pixel(fb, x, y, pen);
             }
             else if (has_fill) {
@@ -152,36 +225,32 @@ static void draw_ellipse(Framebuffer *fb, ShapeBox box, bool has_fill, uint32_t 
 
 void shapes_ellipse(Framebuffer *fb, ShapeBox box, uint32_t fill, uint32_t pen, int pen_width)
 {
-    draw_ellipse(fb, box, true, fill, pen, pen_width, NULL, 0);
+    draw_ellipse(fb, box, true, fill, pen, pen_width, NULL);
 }
 
 void shapes_arc(Framebuffer *fb, ShapeBox box, ShapePoint start, ShapePoint end, uint32_t pen,
                 int pen_width)
 {
     Ellipse e = ellipse_in(box);
-    double from = screen_angle(start.x - e.center_x, start.y - e.center_y);
-    double to = screen_angle(end.x - e.center_x, end.y - e.center_y);
-    double span = to - from;
+    Sweep sweep;
 
-    /* Equal rays mean a full ellipse, as in GDI. */
-    if (span <= 0) {
-        span += TWO_PI;
-    }
-    draw_ellipse(fb, box, false, 0, pen, pen_width, &from, span);
+    sweep.start.x = 2 * start.x - e.center_x;
+    sweep.start.y = e.center_y - 2 * start.y;
+    sweep.end.x = 2 * end.x - e.center_x;
+    sweep.end.y = e.center_y - 2 * end.y;
+    draw_ellipse(fb, box, false, 0, pen, pen_width, &sweep);
 }
 
 /* Stamps a round pen tip, `width` pixels across, centered on (x, y). */
 static void stamp_pen(Framebuffer *fb, int x, int y, uint32_t pen, int width)
 {
-    double reach = (width - 1) / 2.0;
-    double radius = width / 2.0;
     int i, j;
 
     for (j = 0; j < width; j++) {
         for (i = 0; i < width; i++) {
-            double ox = i - reach, oy = j - reach;
-            if (ox * ox + oy * oy <= radius * radius) {
-                put_pixel(fb, x + (int)floor(ox + 0.5), y + (int)floor(oy + 0.5), pen);
+            int ox = 2 * i - (width - 1), oy = 2 * j - (width - 1);
+            if (ox * ox + oy * oy <= width * width) {
+                put_pixel(fb, x + (int)floor_div(ox + 1, 2), y + (int)floor_div(oy + 1, 2), pen);
             }
         }
     }

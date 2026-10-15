@@ -228,15 +228,28 @@ static const char *line_break(const char *text, const char *end)
     return newline != NULL && (newline == text || newline[-1] != '\r') ? "\n" : "\r\n";
 }
 
+/*
+ * The file name with its extension swapped for .tmp. DOS names have a single
+ * extension, so appending one could truncate back to the INI itself.
+ */
+static bool temporary_path(const char *path, char *out, size_t size)
+{
+    const char *dot = strrchr(path, '.');
+    const char *separator = strpbrk(dot != NULL ? dot : path, "/\\");
+    size_t stem = dot != NULL && separator == NULL ? (size_t)(dot - path) : strlen(path);
+    int written = snprintf(out, size, "%.*s.tmp", (int)stem, path);
+
+    return written >= 0 && (size_t)written < size;
+}
+
 /* Writes a temporary file first, so a crash never leaves a half-written INI. */
 static bool replace_file(const char *path, const char *data, size_t size)
 {
     char temporary[FS_MAX_PATH];
-    int written = snprintf(temporary, sizeof(temporary), "%s.tmp", path);
     FILE *file;
     bool ok;
 
-    if (written < 0 || (size_t)written >= sizeof(temporary)) {
+    if (!temporary_path(path, temporary, sizeof(temporary))) {
         return false;
     }
     file = fopen(temporary, "wb");

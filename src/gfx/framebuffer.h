@@ -13,6 +13,13 @@
 
 #define FB_RGB(r, g, b) (((uint32_t)(r) << 16) | ((uint32_t)(g) << 8) | (uint32_t)(b))
 
+#define FB_VGA_COLORS 16
+
+/* The 16 Windows VGA colors, in device palette order. */
+extern const uint32_t FB_VGA_PALETTE[FB_VGA_COLORS];
+
+unsigned fb_nearest_vga_index(uint32_t color);
+
 typedef struct {
     uint32_t *pixels;
     int width;

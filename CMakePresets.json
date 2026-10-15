@@ -55,6 +55,13 @@
             "inherits": "base",
             "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "OFF" }
+        },
+        {
+            "name": "dos",
+            "displayName": "MS-DOS: JTHIEF.EXE for any 386 (needs DJGPP)",
+            "inherits": "base",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-djgpp.cmake",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "OFF" }
         }
     ],
     "buildPresets": [
@@ -63,6 +70,7 @@
         { "name": "win64-debug", "configurePreset": "win64-debug" },
         { "name": "win64-release", "configurePreset": "win64-release" },
         { "name": "linux", "configurePreset": "linux" },
-        { "name": "wasm", "configurePreset": "wasm" }
+        { "name": "wasm", "configurePreset": "wasm" },
+        { "name": "dos", "configurePreset": "dos" }
     ]
 }
